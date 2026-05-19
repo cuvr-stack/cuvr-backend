@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+uploads/
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+*.zip
+*.bin
+*.safetensors
+*.ckpt
+models/

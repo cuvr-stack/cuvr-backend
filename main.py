@@ -42,6 +42,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://reality.cuvr.ae",
+        "https://cuvr-reality-dashboard.vercel.app",
         settings.frontend_url,
     ],
     allow_credentials=True,

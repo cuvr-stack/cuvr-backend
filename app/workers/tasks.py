@@ -530,12 +530,13 @@ def generate_scene_variation_task(self, variation_id: str):
 
         elements = json.loads(variation.elements) if variation.elements else []
 
-        # Run AI scene variation
+        # Run AI scene variation — use free-text prompt if provided, else build from elements
         result_img = generate_scene_variation(
             image=img,
             elements=elements,
             style=variation.style,
             color=variation.color,
+            prompt=variation.prompt or "",
         )
 
         # Save result

@@ -338,58 +338,70 @@ _STYLE_SUFFIXES = {
 
 def generate_scene_variation(
     image: Image.Image,
-    elements: list[str],
+    elements: list[str] = None,
     style: str = "Modern",
     color: str = "",
+    prompt: str = "",
 ) -> Image.Image:
     """
-    Re-render specific architectural elements (walls, landscaping, windows, roof,
-    driveway) in a new style/colour while keeping the building structure intact.
+    Re-render an architectural exterior while preserving building structure.
 
-    Uses ControlNet Canny to preserve structural lines, with a descriptive prompt
-    targeting only the chosen elements.
+    Two modes:
+      1. Free-text prompt  — user describes the full scene (preferred, like AutoRender)
+      2. Element selection — choose walls/landscaping/windows/roof/driveway + colour
+
+    Uses ControlNet Canny to keep structural lines intact.
     """
     device = _device()
-    logger.info(f"generate_scene_variation: elements={elements}, style={style}, color={color}, device={device}")
+    logger.info(f"generate_scene_variation: prompt={prompt[:60]!r}, elements={elements}, device={device}")
 
     pipe = _get_controlnet_pipe()
     img_resized = _resize_preserve_aspect(image, max_dim=768)
     canny_img   = _extract_canny(img_resized)
 
-    # Build element descriptions
-    element_parts = []
-    for el in elements:
-        if el == "walls":
-            desc = _ELEMENT_PROMPTS["walls"].get(color, _ELEMENT_PROMPTS["walls"][""])
-            element_parts.append(desc)
-        elif el in _ELEMENT_PROMPTS:
-            element_parts.append(_ELEMENT_PROMPTS[el])
+    if prompt.strip():
+        # ── Mode 1: free-text prompt ──────────────────────────────────────────
+        full_prompt = (
+            "photorealistic architectural exterior photography, 8k ultra sharp, "
+            f"{prompt.strip()}, "
+            "professional architectural photography, golden hour sunlight, "
+            "realistic sky, depth of field, highly detailed building materials"
+        )
+    else:
+        # ── Mode 2: element-based ─────────────────────────────────────────────
+        elements = elements or []
+        parts = []
+        for el in elements:
+            if el == "walls":
+                desc = _ELEMENT_PROMPTS["walls"].get(color, _ELEMENT_PROMPTS["walls"][""])
+                parts.append(desc)
+            elif el in _ELEMENT_PROMPTS:
+                parts.append(_ELEMENT_PROMPTS[el])
 
-    style_suffix = _STYLE_SUFFIXES.get(style, "modern architecture")
+        style_suffix = _STYLE_SUFFIXES.get(style, "modern architecture")
+        full_prompt = (
+            "photorealistic architectural exterior photography, 8k ultra sharp, "
+            + (", ".join(parts) + ", " if parts else "")
+            + f"{style_suffix}, professional architectural photography, "
+            "golden hour sunlight, realistic sky, depth of field, highly detailed building materials"
+        )
 
-    prompt = (
-        "photorealistic architectural exterior photography, 8k ultra sharp, "
-        + ", ".join(element_parts)
-        + f", {style_suffix}, "
-        "professional architectural photography, golden hour sunlight, realistic sky, "
-        "depth of field, highly detailed building materials"
-    )
     negative = (
         "sketch, drawing, cartoon, 2d, flat, blurry, watermark, text, "
         "deformed, unrealistic, overexposed, dark, gloomy, low quality, "
-        "ugly, distorted, broken structure, painterly"
+        "ugly, distorted, broken structure, painterly, illustration"
     )
 
-    logger.info(f"Scene variation prompt: {prompt[:120]}…")
+    logger.info(f"Scene variation full prompt: {full_prompt[:140]}…")
 
     with torch.inference_mode():
         result = pipe(
-            prompt=prompt,
+            prompt=full_prompt,
             negative_prompt=negative,
             image=canny_img,
             num_inference_steps=30,
             guidance_scale=8.5,
-            controlnet_conditioning_scale=0.95,  # slightly relaxed to allow material changes
+            controlnet_conditioning_scale=0.95,
         )
 
     return result.images[0].convert("RGB")

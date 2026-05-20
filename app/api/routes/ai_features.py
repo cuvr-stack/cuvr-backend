@@ -151,9 +151,10 @@ VALID_STYLES   = {"Modern", "Contemporary", "Mediterranean", "Minimalist", "Trop
 
 
 class SceneVariationRequest(BaseModel):
-    elements: list[str]     # e.g. ["walls", "landscaping"]
+    prompt:   str = ""      # free-text description, e.g. "white walls, tropical garden"
+    elements: list[str] = []  # legacy element-based selection (optional)
     style:    str = "Modern"
-    color:    str = ""      # wall colour name, e.g. "Warm White"
+    color:    str = ""
 
 
 @router.post("/photos/{photo_id}/scene-variation", status_code=status.HTTP_202_ACCEPTED)
@@ -174,10 +175,10 @@ def create_scene_variation(
     if not photo.thumbnail_url and not photo.original_url:
         raise HTTPException(status_code=400, detail="Photo has no image to vary")
 
-    # Sanitise inputs
+    if not req.prompt.strip() and not req.elements:
+        raise HTTPException(status_code=400, detail="Provide a prompt or at least one element")
+
     elements = [e for e in req.elements if e in VALID_ELEMENTS]
-    if not elements:
-        raise HTTPException(status_code=400, detail=f"elements must include at least one of: {', '.join(VALID_ELEMENTS)}")
     style = req.style if req.style in VALID_STYLES else "Modern"
 
     variation = PhotoVariation(
@@ -185,6 +186,7 @@ def create_scene_variation(
         elements=json.dumps(elements),
         style=style,
         color=req.color,
+        prompt=req.prompt.strip(),
         status=VariationStatus.pending,
     )
     db.add(variation)
@@ -232,5 +234,6 @@ def get_variation(
         "elements": elements,
         "style": variation.style,
         "color": variation.color,
+        "prompt": variation.prompt,
         "error_message": variation.error_message,
     }

@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # HuggingFace (free alternative to Replicate)
     huggingface_token: str = ""
 
+    # Public API URL — used to build file URLs accessible from the browser
+    # Set to https://api.cuvr.ae in production; falls back to http://localhost:8000
+    public_api_url: str = "http://localhost:8000"
+
     # Remote worker support (Colab / RunPod / AWS)
     # Set this on the remote worker so it fetches/stores files via the Mac backend
     remote_backend_url: str = ""  # e.g. https://xxxx.ngrok-free.app

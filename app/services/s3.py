@@ -26,7 +26,8 @@ def get_s3_client():
 
 
 def _local_url(key: str) -> str:
-    return f"http://localhost:8000/uploads/{key}"
+    base = (settings.public_api_url or "http://localhost:8000").rstrip("/")
+    return f"{base}/uploads/{key}"
 
 
 def _s3_url(key: str) -> str:
@@ -69,12 +70,23 @@ def upload_bytes_to_s3(content: bytes, key: str, content_type: str = "applicatio
 
 def download_bytes(url: str) -> bytes:
     """Download a file from local storage, S3, or remote backend (Colab mode)."""
-    if url.startswith("http://localhost") or url.startswith("http://127.0.0.1"):
+    # Determine if this is a local-storage URL (localhost OR our public API URL)
+    public_base = (settings.public_api_url or "").rstrip("/")
+    is_local_url = (
+        url.startswith("http://localhost")
+        or url.startswith("http://127.0.0.1")
+        or (public_base and url.startswith(public_base))
+    )
+    if is_local_url:
         # Remote worker: fetch via the exposed backend URL instead of local filesystem
         if settings.remote_backend_url:
             import httpx
-            remote_url = url.replace("http://localhost:8000", settings.remote_backend_url)
-            return httpx.get(remote_url, timeout=60).content
+            fetch_url = url
+            if url.startswith("http://localhost:8000"):
+                fetch_url = url.replace("http://localhost:8000", settings.remote_backend_url)
+            elif public_base and url.startswith(public_base):
+                fetch_url = url.replace(public_base, settings.remote_backend_url)
+            return httpx.get(fetch_url, timeout=60).content
         key = url.split("/uploads/", 1)[1]
         return (UPLOADS_DIR / key).read_bytes()
     # S3 URL

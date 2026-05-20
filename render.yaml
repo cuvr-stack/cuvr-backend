@@ -1,0 +1,51 @@
+services:
+  - type: web
+    name: cuvr-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: USE_LOCAL_STORAGE
+        value: "true"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cuvr-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: cuvr-redis
+          type: redis
+          property: connectionString
+
+  - type: worker
+    name: cuvr-photo-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerCommand: python -m celery -A app.workers.celery_app worker --pool=solo --queues=photos,celery --hostname=photo-worker@%h --loglevel=info
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cuvr-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: cuvr-redis
+          type: redis
+          property: connectionString
+      - key: SECRET_KEY
+        fromService:
+          name: cuvr-backend
+          type: web
+          envVarKey: SECRET_KEY
+
+databases:
+  - name: cuvr-postgres
+    plan: free
+    databaseName: cuvr_db
+
+  - name: cuvr-redis
+    plan: free
+    ipAllowList: []

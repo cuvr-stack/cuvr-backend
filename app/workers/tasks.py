@@ -503,11 +503,10 @@ def _update_variation(db, variation_id: str, **kwargs):
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=30)
 def generate_scene_variation_task(self, variation_id: str):
     """
-    Re-render specific architectural elements (walls, landscaping, windows, roof,
-    driveway) using ControlNet Canny + Stable Diffusion img2img.
+    Re-render architectural exterior using:
+      - Local GPU (ControlNet + SD)   → when PyTorch is available
+      - Replicate cloud API           → fallback when GPU is unavailable
     """
-    from app.services.local_ai import generate_scene_variation
-
     db = SessionLocal()
     try:
         variation = db.query(PhotoVariation).filter(PhotoVariation.id == variation_id).first()
@@ -528,16 +527,32 @@ def generate_scene_variation_task(self, variation_id: str):
         image_bytes = download_bytes(source_url)
         img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-        elements = json.loads(variation.elements) if variation.elements else []
+        elements  = json.loads(variation.elements) if variation.elements else []
+        ai_model  = getattr(variation, "ai_model", "quality") or "quality"
+        prompt    = variation.prompt or ""
 
-        # Run AI scene variation — use free-text prompt if provided, else build from elements
-        result_img = generate_scene_variation(
-            image=img,
-            elements=elements,
-            style=variation.style,
-            color=variation.color,
-            prompt=variation.prompt or "",
-        )
+        # ── Try local GPU first, fall back to Replicate ───────────────────────
+        try:
+            from app.services.local_ai import (
+                generate_scene_variation as _local_variation,
+                _TORCH_AVAILABLE,
+            )
+            if not _TORCH_AVAILABLE:
+                raise RuntimeError("torch_unavailable")
+            result_img = _local_variation(
+                image=img, elements=elements,
+                style=variation.style, color=variation.color, prompt=prompt,
+            )
+            logger.info(f"Scene variation {variation_id}: used local GPU")
+
+        except (RuntimeError, ImportError):
+            # Local GPU not available — use Replicate cloud API
+            logger.info(f"Scene variation {variation_id}: falling back to Replicate (model={ai_model})")
+            from app.services.replicate_ai import generate_scene_variation_replicate
+            result_img = generate_scene_variation_replicate(
+                image=img, prompt=prompt, model=ai_model,
+            )
+            logger.info(f"Scene variation {variation_id}: Replicate render complete")
 
         # Save result
         buf = io.BytesIO()
@@ -553,7 +568,7 @@ def generate_scene_variation_task(self, variation_id: str):
         logger.info(f"Scene variation {variation_id} ready at {variation_url}")
 
     except RuntimeError as exc:
-        # Permanent failures (e.g. torch not available) — don't retry
+        # Permanent failures (bad config, missing token) — don't retry
         logger.error(f"generate_scene_variation_task permanent failure: {exc}")
         _update_variation(
             db, variation_id,

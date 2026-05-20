@@ -148,6 +148,7 @@ def get_styles():
 
 VALID_ELEMENTS = {"walls", "landscaping", "windows", "roof", "driveway"}
 VALID_STYLES   = {"Modern", "Contemporary", "Mediterranean", "Minimalist", "Tropical", "Industrial"}
+VALID_MODELS   = {"standard", "quality", "ultra"}
 
 
 class SceneVariationRequest(BaseModel):
@@ -155,6 +156,7 @@ class SceneVariationRequest(BaseModel):
     elements: list[str] = []  # legacy element-based selection (optional)
     style:    str = "Modern"
     color:    str = ""
+    ai_model: str = "quality"  # standard | quality | ultra
 
 
 @router.post("/photos/{photo_id}/scene-variation", status_code=status.HTTP_202_ACCEPTED)
@@ -179,7 +181,8 @@ def create_scene_variation(
         raise HTTPException(status_code=400, detail="Provide a prompt or at least one element")
 
     elements = [e for e in req.elements if e in VALID_ELEMENTS]
-    style = req.style if req.style in VALID_STYLES else "Modern"
+    style    = req.style    if req.style    in VALID_STYLES  else "Modern"
+    ai_model = req.ai_model if req.ai_model in VALID_MODELS  else "quality"
 
     variation = PhotoVariation(
         photo_id=photo_id,
@@ -187,6 +190,7 @@ def create_scene_variation(
         style=style,
         color=req.color,
         prompt=req.prompt.strip(),
+        ai_model=ai_model,
         status=VariationStatus.pending,
     )
     db.add(variation)
@@ -200,9 +204,10 @@ def create_scene_variation(
 
     return {
         "variation_id": variation.id,
-        "status": variation.status,
+        "status":   variation.status,
         "elements": elements,
-        "style": style,
+        "style":    style,
+        "ai_model": ai_model,
     }
 
 
@@ -227,13 +232,14 @@ def get_variation(
 
     elements = json.loads(variation.elements) if variation.elements else []
     return {
-        "id": variation.id,
-        "photo_id": variation.photo_id,
-        "status": variation.status,
+        "id":            variation.id,
+        "photo_id":      variation.photo_id,
+        "status":        variation.status,
         "variation_url": variation.variation_url,
-        "elements": elements,
-        "style": variation.style,
-        "color": variation.color,
-        "prompt": variation.prompt,
+        "elements":      elements,
+        "style":         variation.style,
+        "color":         variation.color,
+        "prompt":        variation.prompt,
+        "ai_model":      getattr(variation, "ai_model", "quality"),
         "error_message": variation.error_message,
     }

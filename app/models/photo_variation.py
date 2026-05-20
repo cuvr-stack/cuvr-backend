@@ -24,6 +24,7 @@ class PhotoVariation(Base):
     style:    Mapped[str] = mapped_column(String, nullable=False, default="Modern")
     color:    Mapped[str] = mapped_column(String, nullable=False, default="")
     prompt:   Mapped[str] = mapped_column(String, nullable=False, default="")    # free-text prompt
+    ai_model: Mapped[str] = mapped_column(String, nullable=False, default="quality")  # standard/quality/ultra
 
     # Result
     variation_url: Mapped[str | None] = mapped_column(String, nullable=True)

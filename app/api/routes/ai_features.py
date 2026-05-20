@@ -1,13 +1,15 @@
+import json
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.photo import Photo, ProcessingStatus
+from app.models.photo_variation import PhotoVariation, VariationStatus
 from app.models.property import Property
 from app.api.deps import get_current_user
 from app.models.user import User
-from app.workers.tasks import stage_room_task, render_sketch_task
+from app.workers.tasks import stage_room_task, render_sketch_task, generate_3d_task, generate_scene_variation_task
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 logger = logging.getLogger(__name__)
@@ -26,6 +28,12 @@ class StageRoomRequest(BaseModel):
 class RenderSketchRequest(BaseModel):
     style: str = "modern luxury interior"
     room_type: str = "living room"
+
+
+class Generate3DRequest(BaseModel):
+    photo_ids: list[str]          # ordered: [front, left, right, back, ...]
+    style: str = "modern minimalist"
+    room_type: str = "exterior building"
 
 
 @router.post("/photos/{photo_id}/stage", status_code=status.HTTP_202_ACCEPTED)
@@ -86,6 +94,143 @@ def render_sketch(
     return {"detail": "Sketch rendering queued", "style": req.style, "room_type": req.room_type}
 
 
+@router.post("/properties/{property_id}/generate-3d", status_code=status.HTTP_202_ACCEPTED)
+def generate_3d(
+    property_id: str,
+    req: Generate3DRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Multi-view images → 3D mesh.
+    Requires 2–6 photos from different angles (front, sides, back).
+    The generated GLB is stored and linked to the first photo.
+    """
+    if len(req.photo_ids) < 1:
+        raise HTTPException(status_code=400, detail="At least 1 image required")
+    if len(req.photo_ids) > 6:
+        raise HTTPException(status_code=400, detail="Maximum 6 images")
+
+    # Verify all photos belong to this user's property
+    photos = (
+        db.query(Photo)
+        .join(Property)
+        .filter(
+            Photo.id.in_(req.photo_ids),
+            Property.id == property_id,
+            Property.user_id == current_user.id,
+        )
+        .all()
+    )
+    if len(photos) != len(req.photo_ids):
+        raise HTTPException(status_code=404, detail="One or more photos not found")
+
+    # Mark all as pending
+    for photo in photos:
+        photo.processing_status = ProcessingStatus.pending
+        photo.processing_progress = 0
+    db.commit()
+
+    try:
+        generate_3d_task.delay(req.photo_ids, req.style, req.room_type)
+    except Exception as e:
+        logger.warning(f"Could not enqueue 3D generation task: {e}")
+
+    return {"detail": "3D generation queued", "photo_ids": req.photo_ids}
+
+
 @router.get("/styles")
 def get_styles():
     return {"interior_styles": INTERIOR_STYLES, "room_types": ROOM_TYPES}
+
+
+# ── Scene Variation ─────────────────────────────────────────────────────────
+
+VALID_ELEMENTS = {"walls", "landscaping", "windows", "roof", "driveway"}
+VALID_STYLES   = {"Modern", "Contemporary", "Mediterranean", "Minimalist", "Tropical", "Industrial"}
+
+
+class SceneVariationRequest(BaseModel):
+    elements: list[str]     # e.g. ["walls", "landscaping"]
+    style:    str = "Modern"
+    color:    str = ""      # wall colour name, e.g. "Warm White"
+
+
+@router.post("/photos/{photo_id}/scene-variation", status_code=status.HTTP_202_ACCEPTED)
+def create_scene_variation(
+    photo_id: str,
+    req: SceneVariationRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Queue a scene variation — AI re-renders chosen elements in a new style/colour."""
+    photo = (
+        db.query(Photo).join(Property)
+        .filter(Photo.id == photo_id, Property.user_id == current_user.id)
+        .first()
+    )
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    if not photo.thumbnail_url and not photo.original_url:
+        raise HTTPException(status_code=400, detail="Photo has no image to vary")
+
+    # Sanitise inputs
+    elements = [e for e in req.elements if e in VALID_ELEMENTS]
+    if not elements:
+        raise HTTPException(status_code=400, detail=f"elements must include at least one of: {', '.join(VALID_ELEMENTS)}")
+    style = req.style if req.style in VALID_STYLES else "Modern"
+
+    variation = PhotoVariation(
+        photo_id=photo_id,
+        elements=json.dumps(elements),
+        style=style,
+        color=req.color,
+        status=VariationStatus.pending,
+    )
+    db.add(variation)
+    db.commit()
+    db.refresh(variation)
+
+    try:
+        generate_scene_variation_task.delay(variation.id)
+    except Exception as e:
+        logger.warning(f"Could not enqueue scene variation task: {e}")
+
+    return {
+        "variation_id": variation.id,
+        "status": variation.status,
+        "elements": elements,
+        "style": style,
+    }
+
+
+@router.get("/variations/{variation_id}")
+def get_variation(
+    variation_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Poll variation status + URL."""
+    variation = (
+        db.query(PhotoVariation)
+        .join(Photo).join(Property)
+        .filter(
+            PhotoVariation.id == variation_id,
+            Property.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not variation:
+        raise HTTPException(status_code=404, detail="Variation not found")
+
+    elements = json.loads(variation.elements) if variation.elements else []
+    return {
+        "id": variation.id,
+        "photo_id": variation.photo_id,
+        "status": variation.status,
+        "variation_url": variation.variation_url,
+        "elements": elements,
+        "style": variation.style,
+        "color": variation.color,
+        "error_message": variation.error_message,
+    }

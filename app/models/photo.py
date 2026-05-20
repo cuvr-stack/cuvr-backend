@@ -35,3 +35,6 @@ class Photo(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     property: Mapped["Property"] = relationship("Property", back_populates="photos")
+    variations: Mapped[list["PhotoVariation"]] = relationship(
+        "PhotoVariation", back_populates="photo", cascade="all, delete-orphan"
+    )

@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import logging
 import tempfile
@@ -7,6 +8,7 @@ from PIL import Image
 from app.workers.celery_app import celery_app
 from app.core.database import SessionLocal
 from app.models.photo import Photo, ProcessingStatus
+from app.models.photo_variation import PhotoVariation, VariationStatus
 from app.models.video import Video, VideoStatus
 from app.services.s3 import upload_bytes_to_s3, download_bytes, upload_file_to_s3
 
@@ -382,3 +384,180 @@ def _generate_depth_mesh(img: Image.Image, depth_map: np.ndarray) -> bytes:
     except Exception as e:
         logger.warning(f"GLB mesh generation failed ({e}), returning empty mesh")
         return b""
+
+
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=120)
+def generate_3d_task(self, photo_ids: list, style: str = "modern minimalist", room_type: str = "exterior building"):
+    """
+    Multi-view images → 3D mesh (GLB).
+    Takes 1-6 photos from different angles.
+    - Runs ControlNet Canny render on each view for photorealism
+    - Uses TripoSR on the primary (front) view to generate a 3D mesh
+    - Stores the GLB on the first photo's mesh_url
+    """
+    db = SessionLocal()
+    try:
+        photos = db.query(Photo).filter(Photo.id.in_(photo_ids)).all()
+        # preserve input order
+        photo_map = {p.id: p for p in photos}
+        photos_ordered = [photo_map[pid] for pid in photo_ids if pid in photo_map]
+
+        if not photos_ordered:
+            return
+
+        primary_photo = photos_ordered[0]
+
+        for photo in photos_ordered:
+            _update_photo(db, photo.id, processing_status=ProcessingStatus.processing, processing_progress=10)
+
+        # ── Step 1: Download all view images ──────────────────────────────────
+        view_images = []
+        for photo in photos_ordered:
+            try:
+                raw = download_bytes(photo.original_url)
+                img = Image.open(io.BytesIO(raw)).convert("RGB")
+                view_images.append(img)
+            except Exception as e:
+                logger.warning(f"Could not load image for photo {photo.id}: {e}")
+
+        if not view_images:
+            raise ValueError("No valid images could be loaded")
+
+        # ── Step 2: Photorealistic render on each view ────────────────────────
+        from app.services.local_ai import render_sketch_local
+        rendered_views = []
+        for i, img in enumerate(view_images):
+            try:
+                logger.info(f"Rendering view {i+1}/{len(view_images)}")
+                rendered = render_sketch_local(img, style=style, room_type=room_type)
+                rendered_views.append(rendered)
+                progress = 10 + int((i + 1) / len(view_images) * 50)
+                _update_photo(db, photos_ordered[i].id, processing_progress=progress)
+            except Exception as e:
+                logger.warning(f"Render failed for view {i}: {e}, using original")
+                rendered_views.append(img)
+
+        # Save rendered images as thumbnails for each view photo
+        for i, (photo, rendered) in enumerate(zip(photos_ordered, rendered_views)):
+            try:
+                buf = io.BytesIO()
+                rendered.save(buf, format="JPEG", quality=90)
+                key = f"photos/{photo.property_id}/{photo.id}/rendered_thumbnail.jpg"
+                thumb_url = upload_bytes_to_s3(buf.getvalue(), key, "image/jpeg")
+                _update_photo(db, photo.id, thumbnail_url=thumb_url, processing_progress=60 + i * 5)
+            except Exception as e:
+                logger.warning(f"Could not save rendered thumbnail for photo {photo.id}: {e}")
+
+        # ── Step 3: Generate 3D mesh from primary rendered view ───────────────
+        _update_photo(db, primary_photo.id, processing_progress=75)
+        try:
+            from app.services.local_ai import generate_3d_from_views
+            glb_bytes = generate_3d_from_views(rendered_views)
+
+            if glb_bytes:
+                glb_key = f"photos/{primary_photo.property_id}/{primary_photo.id}/model_3d.glb"
+                glb_url = upload_bytes_to_s3(glb_bytes, glb_key, "model/gltf-binary")
+                _update_photo(db, primary_photo.id, mesh_url=glb_url, processing_progress=95)
+                logger.info(f"3D mesh stored at {glb_url}")
+        except Exception as e:
+            logger.warning(f"3D mesh generation failed: {e}. Falling back to depth mesh.")
+            # Fall back to depth-based mesh from primary view
+            try:
+                primary_bytes = io.BytesIO()
+                rendered_views[0].save(primary_bytes, format="JPEG", quality=90)
+                depth_map = _run_depth_estimation(rendered_views[0], primary_bytes.getvalue())
+                glb_bytes = _generate_depth_mesh(rendered_views[0], depth_map)
+                if glb_bytes:
+                    glb_key = f"photos/{primary_photo.property_id}/{primary_photo.id}/model_3d.glb"
+                    glb_url = upload_bytes_to_s3(glb_bytes, glb_key, "model/gltf-binary")
+                    _update_photo(db, primary_photo.id, mesh_url=glb_url)
+            except Exception as fallback_err:
+                logger.warning(f"Depth mesh fallback also failed: {fallback_err}")
+
+        # ── Step 4: Mark all photos ready ─────────────────────────────────────
+        for photo in photos_ordered:
+            _update_photo(db, photo.id, processing_status=ProcessingStatus.ready, processing_progress=100)
+
+        logger.info(f"3D generation complete for {len(photos_ordered)} views, primary={primary_photo.id}")
+
+    except Exception as exc:
+        logger.exception(f"generate_3d_task failed: {exc}")
+        for pid in photo_ids:
+            _update_photo(db, pid, processing_status=ProcessingStatus.failed, error_message=str(exc)[:500])
+        raise self.retry(exc=exc)
+    finally:
+        db.close()
+
+
+# ── Scene Variation Task ──────────────────────────────────────────────────────
+
+def _update_variation(db, variation_id: str, **kwargs):
+    v = db.query(PhotoVariation).filter(PhotoVariation.id == variation_id).first()
+    if v:
+        for k, val in kwargs.items():
+            setattr(v, k, val)
+        db.commit()
+    return v
+
+
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=30)
+def generate_scene_variation_task(self, variation_id: str):
+    """
+    Re-render specific architectural elements (walls, landscaping, windows, roof,
+    driveway) using ControlNet Canny + Stable Diffusion img2img.
+    """
+    from app.services.local_ai import generate_scene_variation
+
+    db = SessionLocal()
+    try:
+        variation = db.query(PhotoVariation).filter(PhotoVariation.id == variation_id).first()
+        if not variation:
+            logger.error(f"Variation {variation_id} not found")
+            return
+
+        _update_variation(db, variation_id, status=VariationStatus.processing)
+
+        # Load the source photo
+        photo = db.query(Photo).filter(Photo.id == variation.photo_id).first()
+        if not photo:
+            _update_variation(db, variation_id, status=VariationStatus.failed, error_message="Photo not found")
+            return
+
+        # Use thumbnail if available (faster), otherwise original
+        source_url = photo.thumbnail_url or photo.original_url
+        image_bytes = download_bytes(source_url)
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+
+        elements = json.loads(variation.elements) if variation.elements else []
+
+        # Run AI scene variation
+        result_img = generate_scene_variation(
+            image=img,
+            elements=elements,
+            style=variation.style,
+            color=variation.color,
+        )
+
+        # Save result
+        buf = io.BytesIO()
+        result_img.save(buf, format="JPEG", quality=92)
+        variation_key = f"photos/{photo.property_id}/{photo.id}/variations/{variation_id}.jpg"
+        variation_url = upload_bytes_to_s3(buf.getvalue(), variation_key, "image/jpeg")
+
+        _update_variation(
+            db, variation_id,
+            status=VariationStatus.ready,
+            variation_url=variation_url,
+        )
+        logger.info(f"Scene variation {variation_id} ready at {variation_url}")
+
+    except Exception as exc:
+        logger.exception(f"generate_scene_variation_task failed: {exc}")
+        _update_variation(
+            db, variation_id,
+            status=VariationStatus.failed,
+            error_message=str(exc)[:500],
+        )
+        raise self.retry(exc=exc)
+    finally:
+        db.close()

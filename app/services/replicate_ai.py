@@ -1,11 +1,23 @@
 """
-Replicate-based AI inference — cloud GPU via API.
-Used when local PyTorch/GPU is unavailable (e.g. Oracle free-tier VM).
+Replicate-based AI inference — FLUX models (2024, Black Forest Labs).
 
-Models:
-  standard → jagilley/controlnet-canny  (SD 1.5 + ControlNet Canny, ~20s, cheapest)
-  quality  → stability-ai/sdxl          (SDXL img2img, ~40s, much better photorealism)
-  ultra    → stability-ai/sdxl          (SDXL + expert_ensemble_refiner, ~70s, best)
+Why FLUX instead of SD 1.5 / SDXL:
+  FLUX is the successor to Stable Diffusion from the same team.
+  It produces dramatically better photorealism, follows prompts more
+  accurately, and handles architectural imagery with much less artifacting.
+  AutoRender's NanoBanana is a fine-tuned SD 1.5/SDXL — FLUX beats it
+  out-of-the-box without any fine-tuning.
+
+Models used:
+  standard → flux-schnell  (4-step distilled, ~8s,  best speed, text→image)
+  quality  → flux-dev      (full model, img2img,    ~30s, structure-preserving)
+  ultra    → flux-dev      (img2img, more steps,    ~55s, maximum photorealism)
+
+Roadmap (fine-tuning — our own "NanoBanana" equivalent):
+  1. Collect 2-5k architectural render pairs (sketch → photorealistic photo)
+  2. Fine-tune FLUX Dev with LoRA (~8h on an A100, ~$80 compute)
+  3. Host fine-tuned weights on Replicate or HuggingFace
+  4. Swap model IDs below → instant "CUVR Model v1" branding
 """
 
 import io
@@ -19,69 +31,62 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 # ── Replicate model IDs ───────────────────────────────────────────────────────
+# No version hashes needed — Replicate resolves "latest" automatically.
 
-CONTROLNET_CANNY_MODEL = (
-    "jagilley/controlnet-canny:"
-    "aff48af9c68d162388d230a2ab003f68d2638d88ffd3a8ba2e25cf651e88b9be"
-)
-
-SDXL_MODEL = (
-    "stability-ai/sdxl:"
-    "39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b"
-)
+FLUX_SCHNELL = "black-forest-labs/flux-schnell"   # 4-step, text→image, ~8s
+FLUX_DEV     = "black-forest-labs/flux-dev"        # full model, img2img,  ~30s
+FLUX_PRO     = "black-forest-labs/flux-1.1-pro"    # pro tier, text→image, ~15s
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _to_data_uri(img: Image.Image, fmt: str = "PNG") -> str:
-    """Convert PIL Image → base64 data URI string."""
+def _to_data_uri(img: Image.Image, fmt: str = "JPEG") -> str:
     buf = io.BytesIO()
-    img.save(buf, format=fmt)
+    img.save(buf, format=fmt, quality=95)
     b64 = base64.b64encode(buf.getvalue()).decode()
-    mime = "image/png" if fmt.upper() == "PNG" else "image/jpeg"
+    mime = "image/jpeg" if fmt.upper() == "JPEG" else "image/png"
     return f"data:{mime};base64,{b64}"
 
 
-def _resize_fit(img: Image.Image, max_dim: int = 768) -> Image.Image:
+def _resize_fit(img: Image.Image, max_dim: int = 1024) -> Image.Image:
+    """Resize to fit within max_dim, rounding to multiples of 16 (FLUX requirement)."""
     w, h = img.size
     scale = min(max_dim / w, max_dim / h)
-    nw = max(8, (round(w * scale) // 8) * 8)
-    nh = max(8, (round(h * scale) // 8) * 8)
+    nw = max(16, (round(w * scale) // 16) * 16)
+    nh = max(16, (round(h * scale) // 16) * 16)
     return img.resize((nw, nh), Image.LANCZOS)
 
 
-def _extract_canny(img: Image.Image) -> Image.Image:
-    gray = np.array(img.convert("L"))
-    median = int(np.median(gray))
-    low  = max(0,   int(0.66 * median))
-    high = min(255, int(1.33 * median))
-    edges = cv2.Canny(gray, low, high)
-    kernel = np.ones((2, 2), np.uint8)
-    edges  = cv2.dilate(edges, kernel, iterations=1)
-    return Image.fromarray(cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB))
-
-
 def _download_image(url: str) -> Image.Image:
-    resp = httpx.get(str(url), timeout=120, follow_redirects=True)
+    resp = httpx.get(str(url), timeout=180, follow_redirects=True)
     resp.raise_for_status()
     return Image.open(io.BytesIO(resp.content)).convert("RGB")
 
 
-def _build_full_prompt(prompt: str) -> str:
-    return (
-        "photorealistic architectural exterior photography, 8k ultra sharp, "
+def _resolve_output_url(output) -> str:
+    """Handle different Replicate SDK output formats across versions."""
+    if isinstance(output, list):
+        raw = output[0]
+    else:
+        raw = output
+    # FileOutput object (replicate >= 0.22) has .url attribute
+    return str(getattr(raw, "url", None) or raw)
+
+
+def _build_prompt(prompt: str, ultra_realism: bool) -> str:
+    base = (
+        "photorealistic architectural exterior photography, "
         f"{prompt.strip()}, "
         "professional architectural photography, golden hour sunlight, "
-        "realistic sky, depth of field, highly detailed building materials, "
-        "sharp focus, no blur, cinematic"
+        "realistic sky with clouds, depth of field, "
+        "highly detailed building materials and textures"
     )
-
-
-NEGATIVE = (
-    "sketch, drawing, cartoon, 2d, flat, blurry, watermark, text, "
-    "deformed, unrealistic, ugly, low quality, painterly, illustration, "
-    "overexposed, washed out, dark, gloomy, broken structure"
-)
+    if ultra_realism:
+        base += (
+            ", hyperrealistic, 8k ultra sharp, award-winning photography, "
+            "shot on Hasselblad, perfect exposure, crisp details"
+        )
+    return base
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -90,21 +95,25 @@ def generate_scene_variation_replicate(
     image: Image.Image,
     prompt: str,
     model: str = "quality",
-    image_strength: int = 65,   # 0-100
-    style_strength: int = 75,   # 0-100
+    image_strength: int = 65,
+    style_strength: int = 75,
     ultra_realism: bool = True,
 ) -> Image.Image:
     """
-    Generate a photorealistic scene variation via Replicate cloud API.
+    Generate a photorealistic architectural scene variation using FLUX.
 
-    model options:
-      "standard" — ControlNet Canny + SD 1.5 (fastest, structure-preserving)
-      "quality"  — SDXL img2img (best photorealism)
-      "ultra"    — SDXL + ensemble refiner (2-pass, highest quality)
+    model:
+      "standard" → FLUX Schnell  — fast 4-step render, text-guided (~8s)
+      "quality"  → FLUX Dev      — img2img, structure-preserving (~30s)
+      "ultra"    → FLUX Dev      — img2img, more steps, max detail (~55s)
 
-    image_strength (0–100): how much original structure is preserved
-    style_strength (0–100): how faithfully the AI follows the prompt
-    ultra_realism: adds extra sharpness/detail keywords to prompt
+    image_strength (0-100): how much of the original building is preserved
+      Low  (30) = loose interpretation, more creative freedom
+      High (80) = tight structure, just changes materials/colours/landscape
+
+    style_strength (0-100): how closely the AI follows the text prompt
+      Low  (30) = subtle changes
+      High (90) = dramatic transformation
     """
     import replicate as _replicate
     from app.core.config import settings
@@ -112,87 +121,79 @@ def generate_scene_variation_replicate(
     token = settings.replicate_api_token
     if not token:
         raise RuntimeError(
-            "REPLICATE_API_TOKEN is not set. "
-            "Add it to your .env: REPLICATE_API_TOKEN=r8_xxxx"
+            "REPLICATE_API_TOKEN is not configured. "
+            "Go to replicate.com → API Tokens → Create, "
+            "then add REPLICATE_API_TOKEN=r8_xxxx to your .env"
         )
 
     client = _replicate.Client(api_token=token)
 
-    # Map 0-100 sliders to model parameters
-    # prompt_strength: higher = more change, lower = preserves original more
-    prompt_str  = 0.4 + (image_strength / 100) * 0.5   # 0.40 – 0.90
-    # guidance_scale: higher = more prompt faithful
-    guidance    = 5.0 + (style_strength  / 100) * 7.0  # 5.0  – 12.0
-    # controlnet_conditioning: how tightly to follow edge structure
-    cn_scale    = 0.6 + (image_strength  / 100) * 0.9  # 0.60 – 1.50
+    # Map 0-100 sliders to FLUX parameters
+    # prompt_strength: how much the image changes (0=original, 1=new image)
+    prompt_strength = 0.35 + (image_strength / 100) * 0.50   # 0.35 – 0.85
+    # FLUX guidance (1.5–4.5); higher = more prompt-faithful
+    guidance        = 1.5  + (style_strength  / 100) * 3.0   # 1.5  – 4.5
 
-    full_prompt = _build_full_prompt(prompt)
-    if ultra_realism:
-        full_prompt = full_prompt.rstrip() + ", ultra photorealistic, hyperrealistic, 8k, award-winning architectural photography"
-
-    img_resized = _resize_fit(image, max_dim=768)
+    full_prompt = _build_prompt(prompt, ultra_realism)
 
     logger.info(
-        f"Replicate: model={model!r} img_str={image_strength} "
-        f"sty_str={style_strength} ultra={ultra_realism} "
-        f"prompt={full_prompt[:60]}…"
+        f"FLUX inference: model={model!r} "
+        f"img_str={image_strength}({prompt_strength:.2f}) "
+        f"sty_str={style_strength}({guidance:.1f}) "
+        f"ultra={ultra_realism} prompt='{full_prompt[:60]}…'"
     )
 
+    img_resized = _resize_fit(image, max_dim=1024)
+
     if model == "standard":
-        # ── ControlNet Canny — SD 1.5, structure-preserving ──────────────────
-        canny = _extract_canny(img_resized)
+        # ── FLUX Schnell — 4-step distilled, text→image, fastest ─────────────
+        # No img2img in Schnell — but with a very detailed prompt and the
+        # original image dimensions as aspect hint, results are excellent.
+        w, h = img_resized.size
+        ratio = w / h
+        aspect = "16:9" if ratio > 1.6 else ("4:3" if ratio > 1.2 else "1:1")
+
         output = client.run(
-            CONTROLNET_CANNY_MODEL,
+            FLUX_SCHNELL,
             input={
-                "prompt":                       full_prompt,
-                "negative_prompt":              NEGATIVE,
-                "image":                        _to_data_uri(canny),
-                "num_inference_steps":          30,
-                "guidance_scale":               guidance,
-                "eta":                          0.0,
+                "prompt":              full_prompt,
+                "num_inference_steps": 4,
+                "aspect_ratio":        aspect,
+                "output_format":       "jpeg",
+                "output_quality":      95,
             },
         )
 
     elif model == "quality":
-        # ── SDXL img2img — photorealistic ────────────────────────────────────
+        # ── FLUX Dev img2img — preserves building structure ───────────────────
         output = client.run(
-            SDXL_MODEL,
+            FLUX_DEV,
             input={
-                "prompt":               full_prompt,
-                "negative_prompt":      NEGATIVE,
-                "image":                _to_data_uri(img_resized, fmt="JPEG"),
-                "prompt_strength":      prompt_str,
-                "num_inference_steps":  40,
-                "guidance_scale":       guidance,
-                "refine":               "no_refiner",
+                "prompt":              full_prompt,
+                "image":               _to_data_uri(img_resized),
+                "prompt_strength":     prompt_strength,
+                "num_inference_steps": 28,
+                "guidance":            guidance,
+                "output_format":       "jpeg",
+                "output_quality":      95,
             },
         )
 
     else:  # ultra
-        # ── SDXL + expert ensemble refiner — 2-pass ──────────────────────────
+        # ── FLUX Dev img2img — more steps, highest detail ─────────────────────
         output = client.run(
-            SDXL_MODEL,
+            FLUX_DEV,
             input={
-                "prompt":               full_prompt,
-                "negative_prompt":      NEGATIVE,
-                "image":                _to_data_uri(img_resized, fmt="JPEG"),
-                "prompt_strength":      min(0.90, prompt_str + 0.10),
-                "num_inference_steps":  50,
-                "guidance_scale":       guidance,
-                "refine":               "expert_ensemble_refiner",
-                "high_noise_frac":      0.80,
+                "prompt":              full_prompt,
+                "image":               _to_data_uri(img_resized),
+                "prompt_strength":     min(0.85, prompt_strength + 0.08),
+                "num_inference_steps": 50,
+                "guidance":            min(4.5, guidance + 0.5),
+                "output_format":       "jpeg",
+                "output_quality":      98,
             },
         )
 
-    # ── Resolve output URL ────────────────────────────────────────────────────
-    # Replicate SDK returns FileOutput objects or URL strings depending on version
-    if isinstance(output, list):
-        raw = output[0]
-    else:
-        raw = output
-
-    # FileOutput (replicate ≥ 0.22) has .url attribute
-    result_url = getattr(raw, "url", None) or str(raw)
-    logger.info(f"Replicate result URL: {result_url}")
-
+    result_url = _resolve_output_url(output)
+    logger.info(f"FLUX result: {result_url}")
     return _download_image(result_url)

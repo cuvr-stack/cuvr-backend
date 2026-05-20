@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     # Set this on the remote worker so it fetches/stores files via the Mac backend
     remote_backend_url: str = ""  # e.g. https://xxxx.ngrok-free.app
 
+    # Email (SMTP)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "noreply@cuvr.ae"
+
     # Stripe
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""

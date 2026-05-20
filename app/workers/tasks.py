@@ -527,9 +527,12 @@ def generate_scene_variation_task(self, variation_id: str):
         image_bytes = download_bytes(source_url)
         img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-        elements  = json.loads(variation.elements) if variation.elements else []
-        ai_model  = getattr(variation, "ai_model", "quality") or "quality"
-        prompt    = variation.prompt or ""
+        elements       = json.loads(variation.elements) if variation.elements else []
+        ai_model       = getattr(variation, "ai_model",       "quality") or "quality"
+        image_strength = getattr(variation, "image_strength", 65)
+        style_strength = getattr(variation, "style_strength", 75)
+        ultra_realism  = getattr(variation, "ultra_realism",  True)
+        prompt         = variation.prompt or ""
 
         # ── Try local GPU first, fall back to Replicate ───────────────────────
         try:
@@ -547,10 +550,15 @@ def generate_scene_variation_task(self, variation_id: str):
 
         except (RuntimeError, ImportError):
             # Local GPU not available — use Replicate cloud API
-            logger.info(f"Scene variation {variation_id}: falling back to Replicate (model={ai_model})")
+            logger.info(f"Scene variation {variation_id}: Replicate model={ai_model}")
             from app.services.replicate_ai import generate_scene_variation_replicate
             result_img = generate_scene_variation_replicate(
-                image=img, prompt=prompt, model=ai_model,
+                image=img,
+                prompt=prompt,
+                model=ai_model,
+                image_strength=image_strength,
+                style_strength=style_strength,
+                ultra_realism=ultra_realism,
             )
             logger.info(f"Scene variation {variation_id}: Replicate render complete")
 

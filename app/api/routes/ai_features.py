@@ -152,11 +152,14 @@ VALID_MODELS   = {"standard", "quality", "ultra"}
 
 
 class SceneVariationRequest(BaseModel):
-    prompt:   str = ""      # free-text description, e.g. "white walls, tropical garden"
-    elements: list[str] = []  # legacy element-based selection (optional)
-    style:    str = "Modern"
-    color:    str = ""
-    ai_model: str = "quality"  # standard | quality | ultra
+    prompt:          str = ""
+    elements:        list[str] = []
+    style:           str = "Modern"
+    color:           str = ""
+    ai_model:        str = "quality"   # standard | quality | ultra
+    image_strength:  int = 65          # 0–100: how much of the original is preserved
+    style_strength:  int = 75          # 0–100: how faithfully the prompt is followed
+    ultra_realism:   bool = True
 
 
 @router.post("/photos/{photo_id}/scene-variation", status_code=status.HTTP_202_ACCEPTED)
@@ -191,6 +194,9 @@ def create_scene_variation(
         color=req.color,
         prompt=req.prompt.strip(),
         ai_model=ai_model,
+        image_strength=max(0, min(100, req.image_strength)),
+        style_strength=max(0, min(100, req.style_strength)),
+        ultra_realism=req.ultra_realism,
         status=VariationStatus.pending,
     )
     db.add(variation)

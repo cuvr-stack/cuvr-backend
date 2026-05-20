@@ -90,14 +90,21 @@ def generate_scene_variation_replicate(
     image: Image.Image,
     prompt: str,
     model: str = "quality",
+    image_strength: int = 65,   # 0-100
+    style_strength: int = 75,   # 0-100
+    ultra_realism: bool = True,
 ) -> Image.Image:
     """
     Generate a photorealistic scene variation via Replicate cloud API.
 
     model options:
       "standard" — ControlNet Canny + SD 1.5 (fastest, structure-preserving)
-      "quality"  — SDXL img2img (best photorealism, moderate prompt strength)
-      "ultra"    — SDXL + ensemble refiner (highest quality, 2-pass render)
+      "quality"  — SDXL img2img (best photorealism)
+      "ultra"    — SDXL + ensemble refiner (2-pass, highest quality)
+
+    image_strength (0–100): how much original structure is preserved
+    style_strength (0–100): how faithfully the AI follows the prompt
+    ultra_realism: adds extra sharpness/detail keywords to prompt
     """
     import replicate as _replicate
     from app.core.config import settings
@@ -110,10 +117,26 @@ def generate_scene_variation_replicate(
         )
 
     client = _replicate.Client(api_token=token)
+
+    # Map 0-100 sliders to model parameters
+    # prompt_strength: higher = more change, lower = preserves original more
+    prompt_str  = 0.4 + (image_strength / 100) * 0.5   # 0.40 – 0.90
+    # guidance_scale: higher = more prompt faithful
+    guidance    = 5.0 + (style_strength  / 100) * 7.0  # 5.0  – 12.0
+    # controlnet_conditioning: how tightly to follow edge structure
+    cn_scale    = 0.6 + (image_strength  / 100) * 0.9  # 0.60 – 1.50
+
     full_prompt = _build_full_prompt(prompt)
+    if ultra_realism:
+        full_prompt = full_prompt.rstrip() + ", ultra photorealistic, hyperrealistic, 8k, award-winning architectural photography"
+
     img_resized = _resize_fit(image, max_dim=768)
 
-    logger.info(f"Replicate: model={model!r}, prompt={full_prompt[:80]}…")
+    logger.info(
+        f"Replicate: model={model!r} img_str={image_strength} "
+        f"sty_str={style_strength} ultra={ultra_realism} "
+        f"prompt={full_prompt[:60]}…"
+    )
 
     if model == "standard":
         # ── ControlNet Canny — SD 1.5, structure-preserving ──────────────────
@@ -121,43 +144,43 @@ def generate_scene_variation_replicate(
         output = client.run(
             CONTROLNET_CANNY_MODEL,
             input={
-                "prompt":           full_prompt,
-                "negative_prompt":  NEGATIVE,
-                "image":            _to_data_uri(canny),
-                "num_inference_steps": 30,
-                "guidance_scale":   9.0,
-                "eta":              0.0,
+                "prompt":                       full_prompt,
+                "negative_prompt":              NEGATIVE,
+                "image":                        _to_data_uri(canny),
+                "num_inference_steps":          30,
+                "guidance_scale":               guidance,
+                "eta":                          0.0,
             },
         )
 
     elif model == "quality":
-        # ── SDXL img2img — photorealistic, moderate change ───────────────────
+        # ── SDXL img2img — photorealistic ────────────────────────────────────
         output = client.run(
             SDXL_MODEL,
             input={
-                "prompt":           full_prompt,
-                "negative_prompt":  NEGATIVE,
-                "image":            _to_data_uri(img_resized, fmt="JPEG"),
-                "prompt_strength":  0.75,
-                "num_inference_steps": 40,
-                "guidance_scale":   7.5,
-                "refine":           "no_refiner",
+                "prompt":               full_prompt,
+                "negative_prompt":      NEGATIVE,
+                "image":                _to_data_uri(img_resized, fmt="JPEG"),
+                "prompt_strength":      prompt_str,
+                "num_inference_steps":  40,
+                "guidance_scale":       guidance,
+                "refine":               "no_refiner",
             },
         )
 
     else:  # ultra
-        # ── SDXL + expert ensemble refiner — 2-pass, highest quality ─────────
+        # ── SDXL + expert ensemble refiner — 2-pass ──────────────────────────
         output = client.run(
             SDXL_MODEL,
             input={
-                "prompt":           full_prompt,
-                "negative_prompt":  NEGATIVE,
-                "image":            _to_data_uri(img_resized, fmt="JPEG"),
-                "prompt_strength":  0.80,
-                "num_inference_steps": 50,
-                "guidance_scale":   8.0,
-                "refine":           "expert_ensemble_refiner",
-                "high_noise_frac":  0.80,
+                "prompt":               full_prompt,
+                "negative_prompt":      NEGATIVE,
+                "image":                _to_data_uri(img_resized, fmt="JPEG"),
+                "prompt_strength":      min(0.90, prompt_str + 0.10),
+                "num_inference_steps":  50,
+                "guidance_scale":       guidance,
+                "refine":               "expert_ensemble_refiner",
+                "high_noise_frac":      0.80,
             },
         )
 

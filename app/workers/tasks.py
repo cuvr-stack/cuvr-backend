@@ -552,6 +552,14 @@ def generate_scene_variation_task(self, variation_id: str):
         )
         logger.info(f"Scene variation {variation_id} ready at {variation_url}")
 
+    except RuntimeError as exc:
+        # Permanent failures (e.g. torch not available) — don't retry
+        logger.error(f"generate_scene_variation_task permanent failure: {exc}")
+        _update_variation(
+            db, variation_id,
+            status=VariationStatus.failed,
+            error_message=str(exc)[:500],
+        )
     except Exception as exc:
         logger.exception(f"generate_scene_variation_task failed: {exc}")
         _update_variation(

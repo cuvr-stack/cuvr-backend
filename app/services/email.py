@@ -25,12 +25,17 @@ def send_email(to: str, subject: str, html: str) -> bool:
         msg["To"]      = to
         msg.attach(MIMEText(html, "html"))
 
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
-            server.ehlo()
-            if settings.smtp_port != 465:
+        if settings.smtp_port == 465:
+            with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port) as server:
+                server.ehlo()
+                server.login(settings.smtp_user, settings.smtp_password)
+                server.sendmail(msg["From"], [to], msg.as_string())
+        else:
+            with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
+                server.ehlo()
                 server.starttls()
-            server.login(settings.smtp_user, settings.smtp_password)
-            server.sendmail(msg["From"], [to], msg.as_string())
+                server.login(settings.smtp_user, settings.smtp_password)
+                server.sendmail(msg["From"], [to], msg.as_string())
 
         logger.info(f"Email sent to {to}: {subject}")
         return True

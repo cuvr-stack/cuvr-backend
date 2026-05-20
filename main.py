@@ -1,8 +1,12 @@
+import logging
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+
+logging.basicConfig(level=logging.INFO)
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -11,6 +15,31 @@ from app.core.config import settings
 from app.core.database import engine, Base
 from app.api.routes import auth, properties, photos, tours, subscriptions, dashboard, social_auth, videos
 from app.api.routes.ai_features import router as ai_router
+
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://reality.cuvr.ae",
+    "https://app.cuvr.ae",
+    "https://cuvr-reality-dashboard.vercel.app",
+    settings.frontend_url,
+]
+
+
+class StaticFilesCORSMiddleware(BaseHTTPMiddleware):
+    """Add CORS headers to /uploads/* static file responses."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/uploads/"):
+            origin = request.headers.get("origin", "")
+            if origin in ALLOWED_ORIGINS:
+                response.headers["Access-Control-Allow-Origin"] = origin
+            else:
+                response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "*"
+        return response
 
 
 @asynccontextmanager
@@ -37,16 +66,11 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+app.add_middleware(StaticFilesCORSMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://reality.cuvr.ae",
-        "https://app.cuvr.ae",
-        "https://cuvr-reality-dashboard.vercel.app",
-        settings.frontend_url,
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -75,7 +99,8 @@ async def store_file(request: Request, key: str):
     path = _uploads_dir / key
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
-    return {"url": f"http://localhost:8000/uploads/{key}"}
+    base = (settings.public_api_url or "http://localhost:8000").rstrip("/")
+    return {"url": f"{base}/uploads/{key}"}
 
 
 # Serve local uploads when AWS S3 is not configured (development mode)

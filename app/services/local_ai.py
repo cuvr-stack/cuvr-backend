@@ -14,10 +14,17 @@ Why Canny instead of Scribble:
 import io
 import logging
 import numpy as np
-import torch
 from PIL import Image
 
 logger = logging.getLogger(__name__)
+
+# torch is optional — only available on GPU workers
+try:
+    import torch
+    _TORCH_AVAILABLE = True
+except ImportError:
+    _TORCH_AVAILABLE = False
+    logger.warning("torch not available — AI pipelines disabled, using fallbacks")
 
 BASE_MODEL           = "stable-diffusion-v1-5/stable-diffusion-v1-5"
 CONTROLNET_CANNY     = "lllyasviel/sd-controlnet-canny"
@@ -28,6 +35,8 @@ _img2img_pipe    = None
 
 
 def _device():
+    if not _TORCH_AVAILABLE:
+        return "cpu"
     if torch.backends.mps.is_available():
         return "mps"
     if torch.cuda.is_available():
@@ -36,6 +45,8 @@ def _device():
 
 
 def _dtype():
+    if not _TORCH_AVAILABLE:
+        return None
     if torch.cuda.is_available():
         return torch.float16
     return torch.float32
@@ -70,6 +81,8 @@ def _extract_canny(image: Image.Image, low: int = 50, high: int = 150) -> Image.
 
 def _get_controlnet_pipe():
     global _controlnet_pipe
+    if not _TORCH_AVAILABLE:
+        raise RuntimeError("PyTorch is not available on this server. AI pipelines require a GPU worker.")
     if _controlnet_pipe is not None:
         return _controlnet_pipe
 
@@ -94,6 +107,8 @@ def _get_controlnet_pipe():
 
 def _get_img2img_pipe():
     global _img2img_pipe
+    if not _TORCH_AVAILABLE:
+        raise RuntimeError("PyTorch is not available on this server. AI pipelines require a GPU worker.")
     if _img2img_pipe is not None:
         return _img2img_pipe
 
@@ -188,6 +203,8 @@ def render_sketch_local(
     Single image → photorealistic render.
     Uses ControlNet Canny for precise structural fidelity.
     """
+    if not _TORCH_AVAILABLE:
+        raise RuntimeError("PyTorch is not available on this server. AI pipelines require a GPU worker.")
     device = _device()
     logger.info(f"render_sketch_local: style={style}, room_type={room_type}, device={device}")
 
@@ -217,6 +234,8 @@ def stage_room_local(image: Image.Image, style: str = "modern") -> Image.Image:
     """
     Empty room photo → furnished room using img2img.
     """
+    if not _TORCH_AVAILABLE:
+        raise RuntimeError("PyTorch is not available on this server. AI pipelines require a GPU worker.")
     device = _device()
     logger.info(f"stage_room_local: style={style}, device={device}")
 
@@ -263,6 +282,8 @@ def generate_3d_from_views(images: list[Image.Image]) -> bytes:
 
     Returns GLB bytes.
     """
+    if not _TORCH_AVAILABLE:
+        raise RuntimeError("PyTorch is not available on this server. AI pipelines require a GPU worker.")
     try:
         import trimesh
         from tsr.system import TSR
@@ -352,6 +373,8 @@ def generate_scene_variation(
 
     Uses ControlNet Canny to keep structural lines intact.
     """
+    if not _TORCH_AVAILABLE:
+        raise RuntimeError("PyTorch is not available on this server. AI pipelines require a GPU worker.")
     device = _device()
     logger.info(f"generate_scene_variation: prompt={prompt[:60]!r}, elements={elements}, device={device}")
 

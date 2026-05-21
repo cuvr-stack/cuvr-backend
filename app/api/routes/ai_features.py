@@ -217,6 +217,47 @@ def create_scene_variation(
     }
 
 
+@router.get("/properties/{property_id}/variations")
+def list_property_variations(
+    property_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """All AI scene variations across every photo of a property — for the Generation History panel."""
+    prop = db.query(Property).filter(
+        Property.id == property_id, Property.user_id == current_user.id
+    ).first()
+    if not prop:
+        raise HTTPException(status_code=404, detail="Property not found")
+
+    variations = (
+        db.query(PhotoVariation)
+        .join(Photo)
+        .filter(Photo.property_id == property_id)
+        .order_by(PhotoVariation.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for v in variations:
+        elements = json.loads(v.elements) if v.elements else []
+        result.append({
+            "id":            v.id,
+            "photo_id":      v.photo_id,
+            "room_label":    v.photo.room_label if v.photo else None,
+            "original_url":  v.photo.thumbnail_url if v.photo else None,
+            "status":        v.status,
+            "variation_url": v.variation_url,
+            "elements":      elements,
+            "style":         v.style,
+            "color":         v.color,
+            "prompt":        v.prompt,
+            "ai_model":      getattr(v, "ai_model", "quality"),
+            "created_at":    v.created_at,
+        })
+    return {"items": result, "total": len(result)}
+
+
 @router.get("/variations/{variation_id}")
 def get_variation(
     variation_id: str,

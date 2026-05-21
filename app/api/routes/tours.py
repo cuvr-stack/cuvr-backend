@@ -1,4 +1,5 @@
 import secrets
+import random
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -26,6 +27,15 @@ class UpdateTourRequest(BaseModel):
     is_public: bool | None = None
 
 
+def _generate_share_code(db) -> str:
+    """Generate a unique 6-digit numeric code."""
+    for _ in range(20):
+        code = f"{random.randint(0, 999999):06d}"
+        if not db.query(Tour).filter(Tour.share_code == code).first():
+            return code
+    raise RuntimeError("Could not generate unique share code")
+
+
 def _tour_to_dict(tour: Tour, base_url: str = ""):
     return {
         "id": tour.id,
@@ -34,6 +44,7 @@ def _tour_to_dict(tour: Tour, base_url: str = ""):
         "description": tour.description,
         "is_public": tour.is_public,
         "share_token": tour.share_token,
+        "share_code": tour.share_code,
         "share_url": f"{base_url}/vr/tour/{tour.share_token}" if tour.share_token else None,
         "view_count": tour.view_count,
         "scenes": [
@@ -155,10 +166,13 @@ def generate_share_token(
     if not tour:
         raise HTTPException(status_code=404, detail="Tour not found")
     tour.share_token = secrets.token_urlsafe(32)
+    if not tour.share_code:
+        tour.share_code = _generate_share_code(db)
     tour.is_public = True
     db.commit()
     return {
         "share_token": tour.share_token,
+        "share_code": tour.share_code,
         "share_url": f"{settings.frontend_url}/vr/tour/{tour.share_token}",
     }
 
@@ -169,6 +183,19 @@ def get_tour_by_token(token: str, db: Session = Depends(get_db)):
     tour = db.query(Tour).filter(Tour.share_token == token).first()
     if not tour:
         raise HTTPException(status_code=404, detail="Tour not found")
+    tour.view_count += 1
+    db.commit()
+    return _tour_to_dict(tour, settings.frontend_url)
+
+
+@router.get("/code/{code}")
+def get_tour_by_code(code: str, db: Session = Depends(get_db)):
+    """Public endpoint — Meta Quest app fetches tour by 6-digit code."""
+    if not code.isdigit() or len(code) != 6:
+        raise HTTPException(status_code=400, detail="Code must be exactly 6 digits")
+    tour = db.query(Tour).filter(Tour.share_code == code, Tour.is_public == True).first()
+    if not tour:
+        raise HTTPException(status_code=404, detail="Invalid code — tour not found")
     tour.view_count += 1
     db.commit()
     return _tour_to_dict(tour, settings.frontend_url)

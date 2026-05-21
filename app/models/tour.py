@@ -14,6 +14,7 @@ class Tour(Base):
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)
     share_token: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
+    share_code: Mapped[str | None] = mapped_column(String(6), unique=True, nullable=True)
     view_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

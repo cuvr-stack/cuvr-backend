@@ -21,7 +21,7 @@ ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "https://reality.cuvr.ae",
     "https://app.cuvr.ae",
-    "https://cuvr-reality-dashboard.vercel.app",
+    "https://cuvr-realty-dashboard.vercel.app",
     settings.frontend_url,
 ]
 

@@ -45,7 +45,7 @@ def send_email(to: str, subject: str, html: str) -> bool:
 
 
 def send_verification_email(to: str, code: str, name: str) -> bool:
-    subject = "Verify your CUVR Reality account"
+    subject = "Verify your CUVR Realty account"
     html = f"""
     <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
       <div style="background: #080d1a; padding: 32px; border-radius: 12px;">
@@ -68,7 +68,7 @@ def send_verification_email(to: str, code: str, name: str) -> bool:
         </div>
 
         <p style="color: #8899bb; font-size: 13px;">
-          If you didn't create a CUVR Reality account, you can safely ignore this email.
+          If you didn't create a CUVR Realty account, you can safely ignore this email.
         </p>
       </div>
     </div>

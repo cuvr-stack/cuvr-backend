@@ -4,7 +4,7 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     # App
-    app_name: str = "CUVR Reality API"
+    app_name: str = "CUVR Realty API"
     environment: str = "development"
     frontend_url: str = "http://localhost:3000"
 
@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
     aws_region: str = "us-east-1"
-    s3_bucket_name: str = "cuvr-reality-assets"
+    s3_bucket_name: str = "cuvr-realty-assets"
     use_local_storage: bool = False
 
     # Social Auth

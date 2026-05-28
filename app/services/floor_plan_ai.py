@@ -249,7 +249,7 @@ def generate_room_texture(
             "width":            w,
             "height":           h,
             "num_outputs":      1,
-            "output_format":    "jpeg",
+            "output_format":    "jpg",
             "output_quality":   90,
             "num_inference_steps": 4,
         }

@@ -4,8 +4,8 @@ floor_plan_ai.py
 Two AI stages for converting a floor plan image into a realistic 3D walkthrough.
 Both stages run 100% on Replicate — no OpenAI key required.
 
-Stage 1 – Llama 3.2 Vision 90B  (parse_floor_plan)
-  meta/llama-3.2-90b-vision-instruct on Replicate.
+Stage 1 – Claude Sonnet 4.6  (parse_floor_plan)
+  anthropic/claude-sonnet-4.6 on Replicate.
   Reads the architectural drawing and returns structured JSON:
   rooms, walls, doors, windows, dimensions, room types.
 
@@ -125,14 +125,15 @@ def _room_type_key(label: str) -> str:
     return "default"
 
 
-# ── Stage 1: Llama 3.2 Vision – parse floor plan ─────────────────────────────
+# ── Stage 1: Claude Sonnet 4.6 – parse floor plan ────────────────────────────
 # Runs on Replicate — no OpenAI key needed.
+# Note: meta/llama-3.2-90b-vision-instruct was removed from Replicate.
+# Using anthropic/claude-sonnet-4.6 which has superior floor plan understanding.
 
-LLAMA_VISION_MODEL = "meta/llama-3.2-90b-vision-instruct"
+CLAUDE_VISION_MODEL = "anthropic/claude-sonnet-4.6"
 
-PARSE_PROMPT = """You are an expert architectural floor plan analyser.
-Analyse this floor plan image and extract ALL rooms and spaces.
-Return ONLY valid JSON — no markdown, no commentary, no extra text.
+PARSE_SYSTEM_PROMPT = """You are an expert architectural floor plan analyser.
+When given a floor plan image, extract ALL rooms and spaces and return ONLY valid JSON — no markdown, no commentary, no extra text.
 
 JSON schema:
 {
@@ -170,10 +171,12 @@ Rules:
 - For doors leading outside, set room_to as "exterior".
 - Respond with JSON only."""
 
+PARSE_PROMPT = "Analyse this floor plan image and return the JSON as specified in your instructions."
+
 
 def parse_floor_plan(image_bytes: bytes, replicate_token: str) -> dict:
     """
-    Call Llama 3.2 Vision 90B on Replicate to parse a floor plan image.
+    Call Claude Sonnet 4.6 on Replicate to parse a floor plan image.
     Uses only REPLICATE_API_TOKEN — no OpenAI key needed.
     Returns the parsed dict.
     """
@@ -184,17 +187,16 @@ def parse_floor_plan(image_bytes: bytes, replicate_token: str) -> dict:
     b64  = base64.b64encode(image_bytes).decode()
     data_uri = f"data:image/jpeg;base64,{b64}"
 
-    logger.info("[FloorPlanAI] Calling Llama 3.2 Vision on Replicate...")
+    logger.info("[FloorPlanAI] Calling Claude Sonnet 4.6 Vision on Replicate...")
 
-    # Llama 3.2 Vision returns a generator of string tokens
+    # Claude on Replicate returns a generator of string tokens
     output = _replicate.run(
-        LLAMA_VISION_MODEL,
+        CLAUDE_VISION_MODEL,
         input={
-            "image":       data_uri,
-            "prompt":      PARSE_PROMPT,
-            "max_tokens":  4096,
-            "temperature": 0.1,    # low temp = deterministic JSON
-            "top_p":       0.9,
+            "image":         data_uri,
+            "prompt":        PARSE_PROMPT,
+            "system_prompt": PARSE_SYSTEM_PROMPT,
+            "max_tokens":    4096,
         }
     )
 

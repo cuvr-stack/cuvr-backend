@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.database import engine, Base
 from app.api.routes import auth, properties, photos, tours, subscriptions, dashboard, social_auth, videos
 from app.api.routes.ai_features import router as ai_router
+from app.api.routes.floor_plan import router as floor_plan_router
 
 ALLOWED_ORIGINS = [
     "http://localhost:3000",
@@ -85,6 +86,7 @@ app.include_router(dashboard.router, prefix="/api")
 app.include_router(social_auth.router, prefix="/api")
 app.include_router(videos.router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
+app.include_router(floor_plan_router, prefix="/api")
 
 
 @app.get("/health")

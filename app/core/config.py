@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # Luma AI (Gaussian Splatting)
     luma_api_key: str = ""
 
+    # OpenAI (GPT-4 Vision — floor plan parsing)
+    openai_api_key: str = ""
+
     # Replicate (optional — paid)
     replicate_api_token: str = ""
 

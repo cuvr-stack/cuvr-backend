@@ -34,10 +34,7 @@ class Settings(BaseSettings):
     # Luma AI (Gaussian Splatting)
     luma_api_key: str = ""
 
-    # OpenAI (GPT-4 Vision — floor plan parsing)
-    openai_api_key: str = ""
-
-    # Replicate (optional — paid)
+    # Replicate (floor plan parsing via Llama 3.2 Vision + FLUX textures)
     replicate_api_token: str = ""
 
     # HuggingFace (free alternative to Replicate)

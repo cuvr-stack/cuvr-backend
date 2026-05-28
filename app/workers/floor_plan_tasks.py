@@ -51,16 +51,15 @@ def process_floor_plan_task(self, floor_plan_id: str):
         image_bytes = download_bytes(fp.original_url)
         _update(db, floor_plan_id, progress=10)
 
-        # ── Step 2: GPT-4 Vision parsing ──────────────────────────────────────
-        logger.info(f"[FPTask] Parsing floor plan with GPT-4 Vision...")
+        # ── Step 2: Llama 3.2 Vision parsing (Replicate) ─────────────────────
+        logger.info(f"[FPTask] Parsing floor plan with Llama 3.2 Vision (Replicate)...")
         from app.services.floor_plan_ai import parse_floor_plan
 
-        openai_key = getattr(settings, "openai_api_key", "")
-        if not openai_key:
+        if not settings.replicate_api_token:
             raise RuntimeError(
-                "OPENAI_API_KEY not configured. Add it to your .env file.")
+                "REPLICATE_API_TOKEN not configured. Add it to your .env file.")
 
-        parsed = parse_floor_plan(image_bytes, openai_key)
+        parsed = parse_floor_plan(image_bytes, settings.replicate_api_token)
         room_count = len(parsed.get("rooms", []))
         logger.info(f"[FPTask] Parsed {room_count} rooms")
 

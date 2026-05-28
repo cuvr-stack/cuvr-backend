@@ -1,21 +1,25 @@
 """
 floor_plan_ai.py
 ────────────────
-Two AI stages for converting a floor plan image into a realistic 3D walkthrough:
+Two AI stages for converting a floor plan image into a realistic 3D walkthrough.
+Both stages run 100% on Replicate — no OpenAI key required.
 
-Stage 1 – GPT-4 Vision  (parse_floor_plan)
+Stage 1 – Llama 3.2 Vision 90B  (parse_floor_plan)
+  meta/llama-3.2-90b-vision-instruct on Replicate.
   Reads the architectural drawing and returns structured JSON:
   rooms, walls, doors, windows, dimensions, room types.
 
-Stage 2 – FLUX Dev img2img  (generate_room_texture)
-  Takes one room's floor plan crop and generates a photorealistic
-  interior photo that can be applied as a texture in Unity.
+Stage 2 – FLUX Schnell  (generate_room_texture)
+  black-forest-labs/flux-schnell on Replicate.
+  Generates a photorealistic interior photo per room type,
+  applied as a texture in Unity.
 """
 
 import io
 import base64
 import json
 import logging
+import os
 import re
 import httpx
 from PIL import Image
@@ -121,11 +125,14 @@ def _room_type_key(label: str) -> str:
     return "default"
 
 
-# ── Stage 1: GPT-4 Vision – parse floor plan ──────────────────────────────────
+# ── Stage 1: Llama 3.2 Vision – parse floor plan ─────────────────────────────
+# Runs on Replicate — no OpenAI key needed.
 
-PARSE_SYSTEM_PROMPT = """You are an expert architectural floor plan analyser.
-Given a floor plan image, extract ALL rooms and spaces with their exact data.
-Return ONLY valid JSON — no markdown, no commentary.
+LLAMA_VISION_MODEL = "meta/llama-3.2-90b-vision-instruct"
+
+PARSE_PROMPT = """You are an expert architectural floor plan analyser.
+Analyse this floor plan image and extract ALL rooms and spaces.
+Return ONLY valid JSON — no markdown, no commentary, no extra text.
 
 JSON schema:
 {
@@ -142,8 +149,7 @@ JSON schema:
       "y_pct": <0-100, top edge % of total height>,
       "w_pct": <0-100, room width % of total width>,
       "h_pct": <0-100, room height % of total height>,
-      "level_cm": <number, elevation in cm, default 0>,
-      "notes": "<any extra info, optional>"
+      "level_cm": <number, elevation in cm, default 0>
     }
   ],
   "doors": [
@@ -153,68 +159,56 @@ JSON schema:
       "x_pct": <number>,
       "y_pct": <number>
     }
-  ],
-  "notes": "<overall property notes>"
+  ]
 }
 
 Rules:
 - Extract EVERY labelled space shown in the drawing.
-- Use the dimensions written on the drawing (e.g. "350 X 400" means width=350cm, height=400cm).
+- Use dimensions written on the drawing (e.g. "350 X 400" → width=350cm, height=400cm).
 - Estimate position percentages from the drawing layout.
 - level_cm comes from labels like "+45 lvl" → 45, "+30 lvl" → 30.
-- For doors, set room_to as "exterior" if the door leads outside."""
+- For doors leading outside, set room_to as "exterior".
+- Respond with JSON only."""
 
 
-def parse_floor_plan(image_bytes: bytes, openai_api_key: str) -> dict:
+def parse_floor_plan(image_bytes: bytes, replicate_token: str) -> dict:
     """
-    Call GPT-4 Vision to parse a floor plan image into structured JSON.
+    Call Llama 3.2 Vision 90B on Replicate to parse a floor plan image.
+    Uses only REPLICATE_API_TOKEN — no OpenAI key needed.
     Returns the parsed dict.
     """
-    b64 = base64.b64encode(image_bytes).decode()
+    import replicate as _replicate
 
-    payload = {
-        "model": "gpt-4o",
-        "max_tokens": 4096,
-        "messages": [
-            {"role": "system", "content": PARSE_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{b64}",
-                            "detail": "high"
-                        }
-                    },
-                    {
-                        "type": "text",
-                        "text": (
-                            "Please analyse this architectural floor plan and extract all rooms, "
-                            "dimensions, levels, and door connections as JSON."
-                        )
-                    }
-                ]
-            }
-        ]
-    }
+    os.environ["REPLICATE_API_TOKEN"] = replicate_token
 
-    with httpx.Client(timeout=120) as client:
-        resp = client.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {openai_api_key}",
-                "Content-Type": "application/json"
-            },
-            json=payload
-        )
-        resp.raise_for_status()
+    b64  = base64.b64encode(image_bytes).decode()
+    data_uri = f"data:image/jpeg;base64,{b64}"
 
-    content = resp.json()["choices"][0]["message"]["content"].strip()
+    logger.info("[FloorPlanAI] Calling Llama 3.2 Vision on Replicate...")
 
-    # Strip markdown code fences if present
+    # Llama 3.2 Vision returns a generator of string tokens
+    output = _replicate.run(
+        LLAMA_VISION_MODEL,
+        input={
+            "image":       data_uri,
+            "prompt":      PARSE_PROMPT,
+            "max_tokens":  4096,
+            "temperature": 0.1,    # low temp = deterministic JSON
+            "top_p":       0.9,
+        }
+    )
+
+    # Join streamed tokens into one string
+    content = "".join(str(token) for token in output).strip()
+
+    # Strip markdown code fences if the model adds them
     content = re.sub(r"^```(?:json)?\s*", "", content)
-    content = re.sub(r"\s*```$", "", content)
+    content = re.sub(r"\s*```\s*$",       "", content.strip())
+
+    # Find the JSON object in case there's surrounding text
+    match = re.search(r"\{.*\}", content, re.DOTALL)
+    if match:
+        content = match.group(0)
 
     parsed = json.loads(content)
     logger.info(f"[FloorPlanAI] Parsed {len(parsed.get('rooms', []))} rooms")

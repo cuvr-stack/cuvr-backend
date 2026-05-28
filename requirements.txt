@@ -22,7 +22,6 @@ opencv-python-headless>=4.8.0
 trimesh>=4.0.0
 scipy>=1.11.0
 shapely>=2.0.0
-openai>=1.30.0
 python-dotenv==1.0.0
 slowapi==0.1.9
 email-validator==2.1.0

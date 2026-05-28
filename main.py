@@ -15,13 +15,7 @@ from app.core.config import settings
 from app.core.database import engine, Base
 from app.api.routes import auth, properties, photos, tours, subscriptions, dashboard, social_auth, videos
 from app.api.routes.ai_features import router as ai_router
-try:
-    from app.api.routes.floor_plan import router as floor_plan_router
-    _floor_plan_ok = True
-except Exception as _fp_err:
-    logging.error(f"[FLOOR PLAN] Failed to import router: {_fp_err}", exc_info=True)
-    floor_plan_router = None
-    _floor_plan_ok = False
+from app.api.routes.floor_plan import router as floor_plan_router
 
 ALLOWED_ORIGINS = [
     "http://localhost:3000",
@@ -92,11 +86,7 @@ app.include_router(dashboard.router, prefix="/api")
 app.include_router(social_auth.router, prefix="/api")
 app.include_router(videos.router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
-if _floor_plan_ok and floor_plan_router is not None:
-    app.include_router(floor_plan_router, prefix="/api")
-    logging.info("[FLOOR PLAN] Router registered successfully")
-else:
-    logging.error("[FLOOR PLAN] Router NOT registered — check import errors above")
+app.include_router(floor_plan_router, prefix="/api")
 
 
 @app.get("/health")

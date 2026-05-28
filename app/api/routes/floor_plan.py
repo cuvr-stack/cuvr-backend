@@ -27,7 +27,8 @@ from app.models.floor_plan import FloorPlan, FloorPlanStatus
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.services.s3 import upload_file_to_s3
-from app.workers.floor_plan_tasks import process_floor_plan_task
+# NOTE: process_floor_plan_task is imported lazily inside upload_floor_plan()
+# to avoid pulling in trimesh/shapely/replicate at app startup (causes Railway health-check timeout)
 
 router = APIRouter(tags=["floor-plans"])
 logger = logging.getLogger(__name__)
@@ -122,8 +123,9 @@ async def upload_floor_plan(
     db.commit()
     db.refresh(floor_plan)
 
-    # Kick off async pipeline
+    # Kick off async pipeline (lazy import keeps trimesh/shapely off the startup path)
     try:
+        from app.workers.floor_plan_tasks import process_floor_plan_task
         process_floor_plan_task.delay(fp_id)
     except Exception as e:
         logger.warning(f"Could not enqueue floor plan task: {e}")

@@ -91,7 +91,7 @@ app.include_router(floor_plan_router, prefix="/api")
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": settings.app_name}
+    return {"status": "ok", "service": settings.app_name, "version": "floor-plan-v3"}
 
 
 @app.post("/api/internal/store-file")

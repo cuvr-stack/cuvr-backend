@@ -6,7 +6,7 @@ celery_app = Celery(
     "cuvr_worker",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["app.workers.tasks"],
+    include=["app.workers.tasks", "app.workers.floor_plan_tasks"],
 )
 
 celery_app.conf.update(
@@ -22,7 +22,8 @@ celery_app.conf.update(
         # Slow queue: AI render tasks that can take 5-10 minutes
         "app.workers.tasks.render_sketch_task": {"queue": "ai"},
         "app.workers.tasks.stage_room_task":    {"queue": "ai"},
-        "app.workers.tasks.process_video_task": {"queue": "ai"},
+        "app.workers.tasks.process_video_task":              {"queue": "ai"},
+        "app.workers.floor_plan_tasks.process_floor_plan_task": {"queue": "ai"},
     },
 )
 

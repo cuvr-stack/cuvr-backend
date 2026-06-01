@@ -1,0 +1,65 @@
+import { PlanConfig } from "@/types";
+
+export const PLANS: PlanConfig[] = [
+  {
+    id: "starter",
+    name: "Starter",
+    price: 149,
+    priceId: import.meta.env.VITE_STRIPE_STARTER_PRICE_ID ?? "",
+    features: [
+      "Up to 10 properties",
+      "30 photos per property",
+      "10 VR tours/month",
+      "50 GB storage",
+      "Browser-based 3D preview",
+      "Shareable tour links",
+      "Arabic & English UI",
+      "14-day free trial",
+      "Email support",
+    ],
+    limits: { properties: 10, photosPerProperty: 30, toursPerMonth: 10, storageGB: 50 },
+  },
+  {
+    id: "professional",
+    name: "Professional",
+    price: 399,
+    priceId: import.meta.env.VITE_STRIPE_PRO_PRICE_ID ?? "",
+    features: [
+      "Up to 50 properties",
+      "200 photos per property",
+      "Unlimited VR tours",
+      "500 GB storage",
+      "Unity VR app (Quest & PC)",
+      "Priority AI processing (< 2hr)",
+      "Custom agency branding",
+      "Analytics & lead tracking",
+      "Off-plan project support",
+      "14-day free trial",
+      "Priority support",
+    ],
+    limits: { properties: 50, photosPerProperty: 200, toursPerMonth: -1, storageGB: 500 },
+  },
+  {
+    id: "enterprise",
+    name: "Enterprise",
+    price: 999,
+    priceId: import.meta.env.VITE_STRIPE_ENTERPRISE_PRICE_ID ?? "",
+    features: [
+      "Unlimited properties",
+      "Unlimited photos",
+      "Unlimited VR tours",
+      "2 TB storage",
+      "White-label Unity VR app",
+      "Dedicated GPU processing (< 30min)",
+      "Full API access",
+      "SSO & multi-agent team accounts",
+      "Arabic language support",
+      "Dedicated account manager",
+      "SLA guarantee (99.9% uptime)",
+      "On-site onboarding (Dubai)",
+    ],
+    limits: { properties: -1, photosPerProperty: -1, toursPerMonth: -1, storageGB: 2000 },
+  },
+];
+
+export const getPlan = (id: string) => PLANS.find((p) => p.id === id);

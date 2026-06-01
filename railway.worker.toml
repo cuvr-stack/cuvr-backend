@@ -1,8 +1,0 @@
-[build]
-builder = "dockerfile"
-dockerfilePath = "Dockerfile"
-
-[deploy]
-startCommand = "python -m celery -A app.workers.celery_app worker --pool=solo --queues=photos,celery --hostname=photo-worker@%h --loglevel=info"
-restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3

@@ -58,9 +58,9 @@ export default function RegisterPage() {
   };
 
   const inputStyle: React.CSSProperties = {
-    background: "rgba(255,255,255,0.05)",
+    background: "rgba(255,255,255,0.06)",
     border: "1px solid rgba(255,255,255,0.1)",
-    borderRadius: 0,
+    borderRadius: 12,
   };
 
   return (
@@ -68,7 +68,7 @@ export default function RegisterPage() {
       {/* Avatar */}
       <div className="flex justify-center mb-6">
         <div className="w-16 h-16 flex items-center justify-center"
-          style={{ background: "rgba(236,72,153,0.12)", border: "1px solid rgba(236,72,153,0.35)", borderRadius: 0 }}>
+          style={{ background: "rgba(236,72,153,0.12)", border: "1px solid rgba(236,72,153,0.35)", borderRadius: "50%" }}>
           <svg viewBox="0 0 24 24" fill="none" className="w-9 h-9" stroke={PRIMARY} strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round"
               d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
@@ -140,7 +140,7 @@ export default function RegisterPage() {
                 {[1, 2, 3, 4, 5].map(i => (
                   <div key={i} className="h-1 flex-1 transition-all duration-300"
                     style={{
-                      borderRadius: 0,
+                      borderRadius: 12,
                       background: i <= strength.score ? strength.color : "rgba(255,255,255,0.1)",
                     }}
                   />
@@ -209,7 +209,7 @@ export default function RegisterPage() {
           className="w-full py-3 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
           style={{
             background: "linear-gradient(135deg,#8b5cf6,#ec4899)",
-            borderRadius: 0,
+            borderRadius: 12,
             border: "none",
             boxShadow: "0 4px 20px rgba(236,72,153,0.35)",
             fontWeight: 800,

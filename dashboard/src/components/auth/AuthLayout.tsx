@@ -132,7 +132,7 @@ export default function AuthLayout({ children, showSocial = true }: AuthLayoutPr
           {/* Right — form slot */}
           <div
             className="flex-1 p-10 flex flex-col justify-center"
-            style={{ background: "rgba(12,15,26,0.98)" }}
+            style={{ background: "rgba(16, 8, 36, 0.98)" }}
           >
             {children}
 
@@ -155,8 +155,8 @@ export default function AuthLayout({ children, showSocial = true }: AuthLayoutPr
                     onClick={() => { setSocialError(""); googleLogin(); }}
                     className="flex items-center justify-center gap-2 py-3 text-sm font-medium text-white hover:opacity-80 transition-opacity"
                     style={{
-                      borderRadius: 0,
-                      background: "rgba(255,255,255,0.05)",
+                      borderRadius: 12,
+                      background: "rgba(255,255,255,0.07)",
                       border: "1px solid rgba(255,255,255,0.1)",
                     }}
                   >
@@ -175,8 +175,8 @@ export default function AuthLayout({ children, showSocial = true }: AuthLayoutPr
                     onClick={() => { setSocialError(""); handleAppleLogin(); }}
                     className="flex items-center justify-center gap-2 py-3 text-sm font-medium text-white hover:opacity-80 transition-opacity"
                     style={{
-                      borderRadius: 0,
-                      background: "rgba(255,255,255,0.05)",
+                      borderRadius: 12,
+                      background: "rgba(255,255,255,0.07)",
                       border: "1px solid rgba(255,255,255,0.1)",
                     }}
                   >

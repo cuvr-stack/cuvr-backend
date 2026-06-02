@@ -13,16 +13,28 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  h1, h2, h3 {
+    font-family: 'Orbitron', sans-serif;
+  }
+
   h1 {
     font-size: 1.25rem;
+    font-weight: 800;
+    color: #1a1d2e;
+    margin: 0;
+    letter-spacing: -0.5px;
+  }
+
+  h2 {
+    font-size: 0.9375rem;
     font-weight: 700;
     color: #1a1d2e;
     margin: 0;
   }
 
-  h2 {
-    font-size: 0.9375rem;
-    font-weight: 600;
+  h3 {
+    font-size: 0.875rem;
+    font-weight: 700;
     color: #1a1d2e;
     margin: 0;
   }
@@ -63,6 +75,7 @@
     border-radius: 12px;
     outline: none;
     transition: border-color 0.15s, box-shadow 0.15s;
+    font-family: 'Inter', sans-serif;
   }
 
   .input:focus {
@@ -88,6 +101,7 @@
     cursor: pointer;
     outline: none;
     transition: opacity 0.2s;
+    font-family: 'Inter', sans-serif;
   }
 
   .btn:disabled {

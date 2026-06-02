@@ -44,7 +44,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <h1 className="text-3xl font-bold text-white text-center mb-1">Welcome Back</h1>
+      <h1 style={{ fontFamily: "'Orbitron', sans-serif", fontWeight: 800, fontSize: "1.875rem", color: "#fff", textAlign: "center", marginBottom: "0.25rem", letterSpacing: "-0.5px" }}>Welcome Back</h1>
       <p className="text-center text-sm mb-8" style={{ color: "rgba(255,255,255,0.6)" }}>
         Access your spatial ecosystem
       </p>

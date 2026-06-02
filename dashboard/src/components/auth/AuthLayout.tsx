@@ -8,9 +8,9 @@ const PRIMARY_HEX = "#ec4899";
 
 const BrandName = ({ size = 20 }: { size?: number }) => (
   <span style={{ fontFamily: "'Orbitron', sans-serif", fontSize: size, fontWeight: 800, letterSpacing: 1, lineHeight: 1 }}>
-    <span style={{ color: "#ffffff" }}>cuvr</span>
+    <span style={{ color: "#ffffff" }}>CUVR</span>
     <span style={{ color: PRIMARY }}>.</span>
-    <span style={{ color: PRIMARY }}>realty</span>
+    <span style={{ color: PRIMARY }}>REALTY</span>
   </span>
 );
 
@@ -66,7 +66,7 @@ export default function AuthLayout({ children, showSocial = true }: AuthLayoutPr
         style={{ borderBottom: `1px solid rgba(236,72,153,0.18)` }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-          <img src="/cuvr-logo.png" alt="cuvr.realty" className="h-11 w-auto object-contain" />
+          <img src="/cuvr-logo.png" alt="CUVR.REALTY" className="h-11 w-auto object-contain" />
           <BrandName size={18} />
         </div>
         <div className="flex items-center gap-3">
@@ -106,7 +106,7 @@ export default function AuthLayout({ children, showSocial = true }: AuthLayoutPr
               }}
             />
             <div className="relative z-10 p-8 pb-10">
-              <h2 className="text-3xl font-bold text-white leading-tight mb-3">
+              <h2 style={{ fontFamily: "'Orbitron', sans-serif", fontWeight: 800, fontSize: "1.875rem", color: "#fff", lineHeight: 1.2, marginBottom: "0.75rem" }}>
                 Design the<br />
                 <span style={{ color: PRIMARY }}>Future</span>
               </h2>
@@ -198,7 +198,7 @@ export default function AuthLayout({ children, showSocial = true }: AuthLayoutPr
         style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-          <img src="/cuvr-logo.png" alt="cuvr.realty" className="h-8 w-auto object-contain" />
+          <img src="/cuvr-logo.png" alt="CUVR.REALTY" className="h-8 w-auto object-contain" />
           <BrandName size={13} />
         </div>
         <div className="flex items-center gap-6">
@@ -211,7 +211,7 @@ export default function AuthLayout({ children, showSocial = true }: AuthLayoutPr
           ))}
         </div>
         <span className="text-xs" style={{ color: "#ffffff" }}>
-          © 2025 cuvr.realty. All rights reserved.
+          © 2025 CUVR.REALTY. All rights reserved.
         </span>
       </footer>
     </div>

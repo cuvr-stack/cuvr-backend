@@ -13,8 +13,8 @@ export default function DashboardLayout() {
         <main
           className="flex-1 overflow-y-auto p-6"
           style={{
-            background:
-              "linear-gradient(135deg, #edf0fb 0%, #f3effe 40%, #fceef8 100%)",
+            minHeight: 0,
+            background: "linear-gradient(135deg, #edf0fb 0%, #f3effe 40%, #fceef8 100%)",
           }}
         >
           <Outlet />

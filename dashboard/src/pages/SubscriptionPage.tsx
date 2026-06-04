@@ -192,11 +192,11 @@ export default function SubscriptionPage() {
               onClick={() => { if (!isCurrent) setSelectedPlan(plan.id); }}
               style={{
                 position: "relative",
-                background: isDark ? DARK_BG : "rgba(255,255,255,0.75) padding-box, linear-gradient(135deg,#8b5cf6,#ec4899) border-box",
+                background: isDark ? DARK_BG : "rgba(255,255,255,0.82)",
                 backdropFilter: "blur(20px)",
                 WebkitBackdropFilter: "blur(20px)",
                 borderRadius: 24,
-                border: isCurrent
+                border: isSelected ? "2px solid rgba(236,72,153,0.7)" : isCurrent
                   ? `2px solid ${colors.accent}`
                   : isSelected
                   ? "2px solid #ec4899"

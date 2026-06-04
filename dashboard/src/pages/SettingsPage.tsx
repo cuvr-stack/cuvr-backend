@@ -167,7 +167,7 @@ export default function SettingsPage() {
                     background: active
                       ? "linear-gradient(135deg,#8b5cf6,#ec4899)"
                       : "linear-gradient(#fff,#fff) padding-box, linear-gradient(135deg,#8b5cf6,#ec4899) border-box",
-                    border: active ? "none" : "1.5px solid transparent",
+                    border: "1.5px solid transparent",
                     color: active ? "#fff" : "#374151",
                     transition: "all 0.15s",
                     boxShadow: active ? "0 4px 12px rgba(139,92,246,0.3)" : "none",

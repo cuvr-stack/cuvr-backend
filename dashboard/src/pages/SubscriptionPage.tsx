@@ -183,7 +183,7 @@ export default function SubscriptionPage() {
           const Icon     = planIcons[plan.id as keyof typeof planIcons] ?? Zap;
           const isCurrent  = plan.id === currentPlan;
           const isSelected = selectedPlan === plan.id;
-          const isDark     = isSelected || plan.id === "professional";
+          const isDark     = isSelected || (plan.id === "professional" && selectedPlan === null);
           const colors   = planColors[plan.id] ?? planColors.starter;
 
           return (
@@ -219,7 +219,7 @@ export default function SubscriptionPage() {
               {...tilt}
             >
               {/* Popular badge */}
-              {plan.id === "professional" && !isSelected && (
+              {plan.id === "professional" && !isSelected && selectedPlan === null && (
                 <div style={{
                   position: "absolute", top: -14, left: "50%", transform: "translateX(-50%)",
                   padding: "4px 16px", borderRadius: 20, fontSize: 11, fontWeight: 700, color: "#fff",

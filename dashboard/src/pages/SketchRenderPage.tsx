@@ -232,7 +232,7 @@ export default function SketchRenderPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: "flex", gap: 16, height: "calc(100vh - 80px)" }}>
+    <div style={{ display: "flex", gap: 16, height: "100%" }}>
 
       {/* ══════════════════════════════════════════════════════════════════════
           LEFT COLUMN — AI Visualizer

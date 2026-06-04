@@ -17,6 +17,7 @@ import VirtualStagingPage from "@/pages/VirtualStagingPage";
 import SketchRenderPage from "@/pages/SketchRenderPage";
 import VerifyEmailPage from "@/pages/VerifyEmailPage";
 import FloorPlanUploadPage from "@/pages/FloorPlanUploadPage";
+import TeamPage from "@/pages/TeamPage";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -51,6 +52,7 @@ export default function App() {
         <Route path="properties/:id/sketch-render" element={<SketchRenderPage />} />
         <Route path="tours" element={<ToursPage />} />
         <Route path="subscription" element={<SubscriptionPage />} />
+        <Route path="team" element={<TeamPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
     </Routes>

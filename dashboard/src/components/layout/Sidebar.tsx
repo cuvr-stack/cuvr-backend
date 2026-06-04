@@ -11,7 +11,7 @@ const navItems = [
   { to: "/dashboard/properties",   icon: Layers,      label: "Projects" },
   { to: "/dashboard/tours",        icon: Box,         label: "Spatial Assets" },
   { to: "/dashboard/subscription", icon: ShoppingBag, label: "Marketplace" },
-  { to: "/dashboard/settings",     icon: Users,       label: "Team" },
+  { to: "/dashboard/team", icon: Users, label: "Team" },
   { to: "/dashboard/settings",     icon: Settings,    label: "Settings" },
 ];
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Check, Zap, Crown, Building, ShoppingBag, Sparkles } from "lucide-react";
+import { Check, Zap, Crown, Building, ShoppingBag, Sparkles, ArrowRight } from "lucide-react";
 import { api } from "@/lib/api";
 import { tilt } from "@/lib/tilt";
 import { useAuthStore } from "@/store/authStore";
@@ -13,6 +13,8 @@ const planColors: Record<string, { from: string; to: string; accent: string }> =
   professional: { from: "#8b5cf6", to: "#ec4899", accent: "#8b5cf6" },
   enterprise:   { from: "#f59e0b", to: "#ec4899", accent: "#f59e0b" },
 };
+
+const DARK_BG = "linear-gradient(160deg,rgb(26,29,46) 0%,rgb(45,31,78) 100%)";
 
 const glass = {
   background: "rgba(255,255,255,0.65) padding-box, linear-gradient(135deg,#8b5cf6,#ec4899) border-box",
@@ -31,16 +33,17 @@ const headingGradient = {
 } as const;
 
 export default function SubscriptionPage() {
-  const user = useAuthStore((s) => s.user);
+  const user        = useAuthStore((s) => s.user);
   const currentPlan = user?.subscription_plan ?? "free";
+
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [billingPortalLoading, setBillingPortalLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const { data: subscription } = useQuery({
     queryKey: ["subscription"],
     queryFn: () => api.get("/api/subscriptions/current").then((r) => r.data),
   });
-
-  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const checkoutMutation = useMutation({
     mutationFn: (priceId: string) =>
@@ -59,14 +62,28 @@ export default function SubscriptionPage() {
 
   const openBillingPortal = async () => {
     setBillingPortalLoading(true);
-    const { data } = await api.post("/api/subscriptions/portal");
-    window.location.href = data.portal_url;
+    try {
+      const { data } = await api.post("/api/subscriptions/portal");
+      window.location.href = data.portal_url;
+    } catch {
+      setBillingPortalLoading(false);
+      setCheckoutError("Unable to open billing portal. Please contact support@cuvr.ae");
+    }
+  };
+
+  const handleUpgrade = (planId: string, priceId: string) => {
+    setCheckoutError(null);
+    if (!priceId) {
+      setCheckoutError("Checkout is not configured yet. Please contact support@cuvr.ae to activate your plan.");
+      return;
+    }
+    checkoutMutation.mutate(priceId);
   };
 
   return (
     <div style={{ animation: "fadeIn 0.22s ease-out", maxWidth: 960 }}>
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
         <div style={{
           width: 40, height: 40, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center",
@@ -85,7 +102,7 @@ export default function SubscriptionPage() {
         </div>
       </div>
 
-      {/* ── Current plan banner ── */}
+      {/* Current plan banner */}
       {subscription && currentPlan !== "free" && (
         <div style={{
           ...glass, padding: "20px 24px", marginBottom: 28,
@@ -122,12 +139,12 @@ export default function SubscriptionPage() {
             onClick={openBillingPortal}
             disabled={billingPortalLoading}
             style={{
-              padding: "10px 20px", borderRadius: 12,
+              padding: "10px 20px", borderRadius: 12, cursor: billingPortalLoading ? "not-allowed" : "pointer",
               backgroundImage: "linear-gradient(#fff,#fff), linear-gradient(135deg,#8b5cf6,#ec4899)",
               backgroundOrigin: "padding-box, border-box",
               backgroundClip: "padding-box, border-box",
               border: "1.5px solid transparent",
-              color: "#8b5cf6", fontSize: 13, fontWeight: 700, cursor: billingPortalLoading ? "not-allowed" : "pointer",
+              color: "#8b5cf6", fontSize: 13, fontWeight: 700,
               opacity: billingPortalLoading ? 0.6 : 1,
             } as React.CSSProperties}
           >
@@ -136,15 +153,17 @@ export default function SubscriptionPage() {
         </div>
       )}
 
-      {/* ── Plan heading ── */}
+      {/* Plan heading */}
       <div style={{ marginBottom: 20 }}>
         <h2 style={{ fontSize: 16, fontWeight: 700, color: "#1a1d2e", margin: "0 0 4px" }}>
           {currentPlan === "free" ? "Choose a Plan" : "Change Plan"}
         </h2>
-        <p style={{ fontSize: 12, color: "#9ca3af", margin: 0 }}>All plans include a 14-day free trial. No credit card required.</p>
+        <p style={{ fontSize: 12, color: "#9ca3af", margin: 0 }}>
+          Click a plan to select it, then click Upgrade. All plans include a 14-day free trial.
+        </p>
       </div>
 
-      {/* ── Checkout error ── */}
+      {/* Error banner */}
       {checkoutError && (
         <div style={{
           marginBottom: 20, padding: "14px 20px", borderRadius: 14,
@@ -158,41 +177,49 @@ export default function SubscriptionPage() {
         </div>
       )}
 
-      {/* ── Plan cards ── */}
+      {/* Plan cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
         {PLANS.map((plan) => {
-          const Icon = planIcons[plan.id as keyof typeof planIcons] ?? Zap;
-          const isCurrent = plan.id === currentPlan;
-          const isPopular = plan.id === "professional";
-          const colors = planColors[plan.id] ?? planColors.starter;
+          const Icon     = planIcons[plan.id as keyof typeof planIcons] ?? Zap;
+          const isCurrent  = plan.id === currentPlan;
+          const isSelected = selectedPlan === plan.id;
+          const isDark     = isSelected || plan.id === "professional";
+          const colors   = planColors[plan.id] ?? planColors.starter;
 
           return (
-            <div key={plan.id} style={{
-              position: "relative",
-              background: isPopular
-                ? "linear-gradient(160deg,#1a1d2e 0%,#2d1f4e 100%)"
-                : `rgba(255,255,255,0.75) padding-box, linear-gradient(135deg,#8b5cf6,#ec4899) border-box`,
-              backdropFilter: "blur(20px)",
-              WebkitBackdropFilter: "blur(20px)",
-              borderRadius: 24,
-              border: isCurrent
-                ? `2px solid ${colors.accent}`
-                : isPopular
-                ? "1px solid rgba(139,92,246,0.4)"
-                : "1.5px solid transparent",
-              boxShadow: isPopular
-                ? "0 16px 48px rgba(139,92,246,0.25)"
-                : isCurrent
-                ? `0 8px 32px ${colors.accent}30`
-                : "0 4px 24px rgba(0,0,0,0.06)",
-              padding: 28,
-              display: "flex", flexDirection: "column",
-              marginTop: isPopular ? 0 : 8,
-            } as React.CSSProperties}
+            <div
+              key={plan.id}
+              onClick={() => { if (!isCurrent) setSelectedPlan(plan.id); }}
+              style={{
+                position: "relative",
+                background: isDark ? DARK_BG : "rgba(255,255,255,0.75) padding-box, linear-gradient(135deg,#8b5cf6,#ec4899) border-box",
+                backdropFilter: "blur(20px)",
+                WebkitBackdropFilter: "blur(20px)",
+                borderRadius: 24,
+                border: isCurrent
+                  ? `2px solid ${colors.accent}`
+                  : isSelected
+                  ? "2px solid #ec4899"
+                  : isDark
+                  ? "1px solid rgba(139,92,246,0.4)"
+                  : "1.5px solid transparent",
+                boxShadow: isSelected
+                  ? "0 16px 48px rgba(236,72,153,0.3)"
+                  : isDark
+                  ? "0 16px 48px rgba(139,92,246,0.25)"
+                  : isCurrent
+                  ? `0 8px 32px ${colors.accent}30`
+                  : "0 4px 24px rgba(0,0,0,0.06)",
+                padding: 28,
+                display: "flex", flexDirection: "column",
+                marginTop: plan.id === "professional" ? 0 : 8,
+                cursor: isCurrent ? "default" : "pointer",
+                transition: "box-shadow 0.2s, border-color 0.2s, transform 0.2s",
+              } as React.CSSProperties}
               {...tilt}
             >
               {/* Popular badge */}
-              {isPopular && (
+              {plan.id === "professional" && !isSelected && (
                 <div style={{
                   position: "absolute", top: -14, left: "50%", transform: "translateX(-50%)",
                   padding: "4px 16px", borderRadius: 20, fontSize: 11, fontWeight: 700, color: "#fff",
@@ -201,6 +228,19 @@ export default function SubscriptionPage() {
                   whiteSpace: "nowrap",
                 }}>
                   ✦ Most Popular
+                </div>
+              )}
+
+              {/* Selected badge */}
+              {isSelected && (
+                <div style={{
+                  position: "absolute", top: -14, left: "50%", transform: "translateX(-50%)",
+                  padding: "4px 16px", borderRadius: 20, fontSize: 11, fontWeight: 700, color: "#fff",
+                  background: "linear-gradient(135deg,#ec4899,#8b5cf6)",
+                  boxShadow: "0 4px 12px rgba(236,72,153,0.5)",
+                  whiteSpace: "nowrap",
+                }}>
+                  ✓ Selected
                 </div>
               )}
 
@@ -224,7 +264,7 @@ export default function SubscriptionPage() {
                 }}>
                   <Icon size={20} color={colors.accent} />
                 </div>
-                <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: isPopular ? "#fff" : "#1a1d2e" }}>
+                <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: isDark ? "#fff" : "#1a1d2e" }}>
                   {plan.name}
                 </h3>
               </div>
@@ -232,10 +272,10 @@ export default function SubscriptionPage() {
               {/* Price */}
               <div style={{ marginBottom: 24 }}>
                 <div style={{ display: "flex", alignItems: "flex-end", gap: 4 }}>
-                  <span style={{ fontSize: 36, fontWeight: 800, color: isPopular ? "#fff" : "#1a1d2e", lineHeight: 1 }}>
+                  <span style={{ fontSize: 36, fontWeight: 800, color: isDark ? "#fff" : "#1a1d2e", lineHeight: 1 }}>
                     ${plan.price}
                   </span>
-                  <span style={{ fontSize: 13, color: isPopular ? "rgba(255,255,255,0.6)" : "#9ca3af", marginBottom: 4 }}>
+                  <span style={{ fontSize: 13, color: isDark ? "rgba(255,255,255,0.5)" : "#9ca3af", marginBottom: 4 }}>
                     /month
                   </span>
                 </div>
@@ -247,12 +287,12 @@ export default function SubscriptionPage() {
                   <li key={f} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                     <div style={{
                       width: 18, height: 18, borderRadius: "50%", flexShrink: 0, marginTop: 1,
-                      background: isPopular ? "rgba(139,92,246,0.3)" : `${colors.accent}18`,
+                      background: isDark ? "rgba(139,92,246,0.3)" : `${colors.accent}18`,
                       display: "flex", alignItems: "center", justifyContent: "center",
                     }}>
-                      <Check size={10} color={isPopular ? "#a78bfa" : colors.accent} strokeWidth={3} />
+                      <Check size={10} color={isDark ? "#a78bfa" : colors.accent} strokeWidth={3} />
                     </div>
-                    <span style={{ fontSize: 13, color: isPopular ? "rgba(255,255,255,0.85)" : "#374151", lineHeight: 1.5 }}>
+                    <span style={{ fontSize: 13, color: isDark ? "rgba(255,255,255,0.85)" : "#374151", lineHeight: 1.5 }}>
                       {f}
                     </span>
                   </li>
@@ -262,32 +302,41 @@ export default function SubscriptionPage() {
               {/* CTA button */}
               <button
                 disabled={isCurrent || checkoutMutation.isPending}
-                onClick={() => { setCheckoutError(null); checkoutMutation.mutate(plan.priceId); }}
+                onClick={(e) => { e.stopPropagation(); handleUpgrade(plan.id, plan.priceId); }}
                 style={{
                   width: "100%", padding: "13px 0", borderRadius: 14, border: "none",
                   cursor: isCurrent || checkoutMutation.isPending ? "not-allowed" : "pointer",
                   background: isCurrent
-                    ? "rgba(139,92,246,0.1)"
+                    ? "rgba(139,92,246,0.15)"
+                    : isSelected
+                    ? "linear-gradient(135deg,#ec4899,#8b5cf6)"
                     : `linear-gradient(135deg,${colors.from},${colors.to})`,
-                  color: isCurrent ? (isPopular ? "rgba(255,255,255,0.5)" : "#9ca3af") : "#fff",
+                  color: isCurrent ? (isDark ? "rgba(255,255,255,0.4)" : "#9ca3af") : "#fff",
                   fontSize: 14, fontWeight: 800,
-                  boxShadow: !isCurrent ? `0 4px 16px ${colors.accent}40` : "none",
+                  boxShadow: !isCurrent ? (isSelected ? "0 6px 20px rgba(236,72,153,0.45)" : `0 4px 16px ${colors.accent}40`) : "none",
                   transition: "opacity 0.2s",
                   opacity: checkoutMutation.isPending ? 0.6 : 1,
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
                 } as React.CSSProperties}
                 onMouseEnter={e => { if (!isCurrent) e.currentTarget.style.opacity = "0.87"; }}
                 onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}
               >
-                {isCurrent ? "Current Plan" : `Upgrade to ${plan.name}`}
+                {isCurrent
+                  ? "Current Plan"
+                  : checkoutMutation.isPending
+                  ? "Processing…"
+                  : <>{isSelected ? "Confirm Upgrade" : `Upgrade to ${plan.name}`} <ArrowRight size={14} /></>}
               </button>
             </div>
           );
         })}
       </div>
 
-      {/* ── Bottom note ── */}
       <p style={{ fontSize: 12, color: "#9ca3af", textAlign: "center", marginTop: 28 }}>
-        All prices in USD. Cancel anytime. Questions? <a href="mailto:support@cuvr.ae" style={{ color: "#8b5cf6", textDecoration: "none", fontWeight: 600 }}>Contact us</a>
+        All prices in USD. Cancel anytime. Questions?{" "}
+        <a href="mailto:support@cuvr.ae" style={{ color: "#8b5cf6", textDecoration: "none", fontWeight: 600 }}>
+          Contact us
+        </a>
       </p>
     </div>
   );

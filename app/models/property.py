@@ -36,3 +36,4 @@ class Property(Base):
     photos: Mapped[list["Photo"]] = relationship("Photo", back_populates="property", cascade="all, delete-orphan")
     tours: Mapped[list["Tour"]] = relationship("Tour", back_populates="property", cascade="all, delete-orphan")
     videos: Mapped[list["Video"]] = relationship("Video", back_populates="property", cascade="all, delete-orphan")
+    entitlement: Mapped["Entitlement | None"] = relationship("Entitlement", back_populates="property", uselist=False, cascade="all, delete-orphan")

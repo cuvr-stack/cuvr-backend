@@ -12,6 +12,9 @@ import { cn, formatDate, assetUrl } from "@/lib/utils";
 import ParallaxViewer from "@/components/ParallaxViewer";
 import SceneVariationModal from "@/components/SceneVariationModal";
 import SplatViewer from "@/components/ui/SplatViewer";
+import { useEntitlement } from "@/hooks/useEntitlement";
+import { FEATURES, hasFeature } from "@/lib/entitlements";
+import { Lock } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -56,6 +59,7 @@ const MODEL_LABELS: Record<string, string> = {
 
 export default function PropertyDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { data: entitlement } = useEntitlement(id);
   const [activePhoto,    setActivePhoto]    = useState<Photo | null>(null);
   const [variationPhoto, setVariationPhoto] = useState<Photo | null>(null);
   const [activeSplat,    setActiveSplat]    = useState<VideoType | null>(null);
@@ -270,82 +274,120 @@ export default function PropertyDetailPage() {
         </span>
       </div>
 
+      {/* ── Entitlement badge ── */}
+      {entitlement ? (
+        <div style={{
+          display: "inline-flex", alignItems: "center", gap: 8,
+          padding: "6px 14px 6px 10px", borderRadius: 20, marginBottom: 14,
+          background: entitlement.status === "active"
+            ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)",
+          border: `1px solid ${entitlement.status === "active" ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)"}`,
+        }}>
+          <div style={{
+            width: 7, height: 7, borderRadius: "50%",
+            background: entitlement.status === "active" ? "#22c55e" : "#ef4444",
+            boxShadow: entitlement.status === "active" ? "0 0 6px rgba(34,197,94,0.5)" : "none",
+          }} />
+          <span style={{ fontSize: 11, fontWeight: 700, color: entitlement.status === "active" ? "#15803d" : "#dc2626", letterSpacing: 0.4 }}>
+            {entitlement.code}
+          </span>
+          {entitlement.package_name && (
+            <span style={{ fontSize: 11, color: "#6b7280", borderLeft: "1px solid #e5e7eb", paddingLeft: 8, marginLeft: 2 }}>
+              {entitlement.package_name}
+            </span>
+          )}
+        </div>
+      ) : (
+        <div style={{
+          display: "inline-flex", alignItems: "center", gap: 7,
+          padding: "5px 12px", borderRadius: 20, marginBottom: 14,
+          background: "rgba(156,163,175,0.1)", border: "1px solid rgba(156,163,175,0.2)",
+        }}>
+          <Lock size={11} color="#9ca3af" />
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af" }}>No entitlement — features locked</span>
+          <a href="mailto:support@cuvr.ae" style={{ fontSize: 11, fontWeight: 700, color: "#8b5cf6", textDecoration: "none", marginLeft: 4 }}>
+            Contact us →
+          </a>
+        </div>
+      )}
+
       {/* ── Action bar ── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {[
-            { to: `upload`,          icon: Upload,          label: "Upload Photos",  color: "#6366f1" },
-            { to: `upload-video`,    icon: Video,           label: "Upload Video",   color: "#ec4899" },
-            { to: `floor-plan`,      icon: LayoutDashboard, label: "Floor Plan",     color: "#06b6d4" },
-            { to: `virtual-staging`, icon: Sofa,            label: "Stage Room",     color: "#f59e0b" },
-            { to: `sketch-render`,   icon: PenTool,         label: "Sketch Render",  color: "#10b981" },
-          ].map(({ to, icon: Icon, label, color }) => (
-            <Link key={to} to={`/dashboard/properties/${id}/${to}`}
-              style={{
-                display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
-                padding: "10px 14px", borderRadius: 12, textDecoration: "none",
-                background: "rgba(255,255,255,0.7)", backdropFilter: "blur(10px)",
-                border: "1.5px solid transparent",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-                transition: "background 0.15s, transform 0.15s, box-shadow 0.15s",
-                minWidth: 72,
-              }}
-              onMouseEnter={e => {
-                const el = e.currentTarget as HTMLAnchorElement;
-                el.style.background = "rgba(255,255,255,0.95)";
-                el.style.transform = "translateY(-2px)";
-                el.style.boxShadow = "0 6px 20px rgba(0,0,0,0.1)";
-              }}
-              onMouseLeave={e => {
-                const el = e.currentTarget as HTMLAnchorElement;
-                el.style.background = "rgba(255,255,255,0.7)";
-                el.style.transform = "translateY(0)";
-                el.style.boxShadow = "0 2px 8px rgba(0,0,0,0.06)";
-              }}
-            >
-              <div style={{
-                width: 32, height: 32, borderRadius: 10,
-                background: `${color}15`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
-                <Icon size={15} color={color} />
+          {([
+            { to: `upload`,          icon: Upload,          label: "Upload Photos",  color: "#6366f1", feature: FEATURES.RENDER_3D },
+            { to: `upload-video`,    icon: Video,           label: "Upload Video",   color: "#ec4899", feature: FEATURES.RENDER_3D },
+            { to: `floor-plan`,      icon: LayoutDashboard, label: "Floor Plan",     color: "#06b6d4", feature: FEATURES.FLOOR_PLAN },
+            { to: `virtual-staging`, icon: Sofa,            label: "Stage Room",     color: "#f59e0b", feature: FEATURES.VIRTUAL_STAGING },
+            { to: `sketch-render`,   icon: PenTool,         label: "Sketch Render",  color: "#10b981", feature: FEATURES.SKETCH_RENDER },
+          ] as const).map(({ to, icon: Icon, label, color, feature }) => {
+            const unlocked = hasFeature(entitlement, feature);
+            return (
+              <div key={to} style={{ position: "relative" }} title={unlocked ? label : "Contact sales to activate"}>
+                <Link to={unlocked ? `/dashboard/properties/${id}/${to}` : "#"}
+                  onClick={e => { if (!unlocked) e.preventDefault(); }}
+                  style={{
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
+                    padding: "10px 14px", borderRadius: 12, textDecoration: "none",
+                    background: unlocked ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.4)",
+                    backdropFilter: "blur(10px)",
+                    border: "1.5px solid transparent",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+                    transition: "background 0.15s, transform 0.15s, box-shadow 0.15s",
+                    minWidth: 72, cursor: unlocked ? "pointer" : "not-allowed",
+                    opacity: unlocked ? 1 : 0.6,
+                    filter: unlocked ? "none" : "grayscale(0.4)",
+                  }}
+                  onMouseEnter={e => { if (unlocked) { const el = e.currentTarget as HTMLAnchorElement; el.style.background = "rgba(255,255,255,0.95)"; el.style.transform = "translateY(-2px)"; el.style.boxShadow = "0 6px 20px rgba(0,0,0,0.1)"; }}}
+                  onMouseLeave={e => { if (unlocked) { const el = e.currentTarget as HTMLAnchorElement; el.style.background = "rgba(255,255,255,0.7)"; el.style.transform = "translateY(0)"; el.style.boxShadow = "0 2px 8px rgba(0,0,0,0.06)"; }}}
+                >
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 10,
+                    background: unlocked ? `${color}15` : "rgba(156,163,175,0.15)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    {unlocked ? <Icon size={15} color={color} /> : <Lock size={13} color="#9ca3af" />}
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: unlocked ? "#6b7280" : "#9ca3af", whiteSpace: "nowrap", letterSpacing: 0.2 }}>
+                    {label}
+                  </span>
+                </Link>
               </div>
-              <span style={{ fontSize: 10, fontWeight: 600, color: "#6b7280", whiteSpace: "nowrap", letterSpacing: 0.2 }}>
-                {label}
-              </span>
-            </Link>
-          ))}
+            );
+          })}
         </div>
 
-        <Link to={`/dashboard/properties/${id}/tour-builder`}
-          style={{
+        {hasFeature(entitlement, FEATURES.WALKTHROUGH) ? (
+          <Link to={`/dashboard/properties/${id}/tour-builder`}
+            style={{
+              display: "flex", alignItems: "center", gap: 9,
+              padding: "12px 24px", borderRadius: 14, border: "none",
+              background: "linear-gradient(135deg,#8b5cf6,#ec4899)",
+              color: "#fff", fontSize: 14, fontWeight: 700,
+              textDecoration: "none",
+              boxShadow: "0 4px 20px rgba(99,102,241,0.4)",
+              transition: "opacity 0.15s, transform 0.15s",
+              flexShrink: 0,
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.opacity = "0.9"; (e.currentTarget as HTMLAnchorElement).style.transform = "translateY(-1px)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.opacity = "1"; (e.currentTarget as HTMLAnchorElement).style.transform = "translateY(0)"; }}
+          >
+            <div style={{ width: 26, height: 26, borderRadius: 8, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Compass size={14} color="#fff" />
+            </div>
+            Build VR Tour
+          </Link>
+        ) : (
+          <div title="Upgrade to unlock VR Walkthrough" style={{
             display: "flex", alignItems: "center", gap: 9,
-            padding: "12px 24px", borderRadius: 14, border: "none",
-            background: "linear-gradient(135deg,#8b5cf6,#ec4899)",
-            color: "#fff", fontSize: 14, fontWeight: 700,
-            textDecoration: "none",
-            boxShadow: "0 4px 20px rgba(99,102,241,0.4)",
-            transition: "opacity 0.15s, transform 0.15s",
-            flexShrink: 0,
-          }}
-          onMouseEnter={e => {
-            (e.currentTarget as HTMLAnchorElement).style.opacity = "0.9";
-            (e.currentTarget as HTMLAnchorElement).style.transform = "translateY(-1px)";
-          }}
-          onMouseLeave={e => {
-            (e.currentTarget as HTMLAnchorElement).style.opacity = "1";
-            (e.currentTarget as HTMLAnchorElement).style.transform = "translateY(0)";
-          }}
-        >
-          <div style={{
-            width: 26, height: 26, borderRadius: 8,
-            background: "rgba(255,255,255,0.2)",
-            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "12px 24px", borderRadius: 14,
+            background: "rgba(139,92,246,0.12)", border: "1.5px solid rgba(139,92,246,0.2)",
+            color: "#9ca3af", fontSize: 14, fontWeight: 700, cursor: "not-allowed", flexShrink: 0,
           }}>
-            <Compass size={14} color="#fff" />
+            <Lock size={14} color="#9ca3af" />
+            VR Walkthrough Locked
           </div>
-          Build VR Tour
-        </Link>
+        )}
       </div>
 
       {/* ── Hero card ── */}

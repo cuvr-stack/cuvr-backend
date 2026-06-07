@@ -170,7 +170,7 @@ export default function AdminPage() {
                             onClick={() => approve.mutate({ id: req.id })}
                             disabled={approve.isPending}
                             style={{
-                              flex: 1, padding: "10px 0", borderRadius: 10, border: "none", cursor: "pointer",
+                              flex: 1, padding: "10px 0", borderRadius: 10, cursor: "pointer",
                               background: "linear-gradient(135deg,#22c55e,#16a34a)", color: "#fff", fontSize: 13, fontWeight: 700,
                               display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
                             }}
@@ -181,7 +181,7 @@ export default function AdminPage() {
                             onClick={() => reject.mutate({ id: req.id })}
                             disabled={reject.isPending}
                             style={{
-                              flex: 1, padding: "10px 0", borderRadius: 10, border: "none", cursor: "pointer",
+                              flex: 1, padding: "10px 0", borderRadius: 10, cursor: "pointer",
                               background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
                               color: "#ef4444", fontSize: 13, fontWeight: 700,
                               display: "flex", alignItems: "center", justifyContent: "center", gap: 6,

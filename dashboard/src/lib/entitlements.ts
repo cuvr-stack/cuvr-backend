@@ -56,3 +56,12 @@ export function hasFeature(ent: Entitlement | null | undefined, feature: Feature
   if (ent.expires_at && new Date(ent.expires_at) < new Date()) return false;
   return !!ent[feature as keyof Entitlement];
 }
+
+// ── Human-readable feature labels ────────────────────────────────────────────
+export const FEATURE_LABELS: Record<string, string> = {
+  feat_render_3d:       "3D Render",
+  feat_walkthrough:     "VR Walkthrough",
+  feat_virtual_staging: "Virtual Staging",
+  feat_floor_plan:      "Floor Plan",
+  feat_sketch_render:   "Sketch Render",
+};

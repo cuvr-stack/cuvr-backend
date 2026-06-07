@@ -17,6 +17,7 @@ import VirtualStagingPage from "@/pages/VirtualStagingPage";
 import SketchRenderPage from "@/pages/SketchRenderPage";
 import VerifyEmailPage from "@/pages/VerifyEmailPage";
 import FloorPlanUploadPage from "@/pages/FloorPlanUploadPage";
+import AdminPage from "@/pages/AdminPage";
 import TeamPage from "@/pages/TeamPage";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="subscription" element={<SubscriptionPage />} />
         <Route path="team" element={<TeamPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="admin" element={<AdminPage />} />
       </Route>
     </Routes>
   );
